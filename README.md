@@ -1,7 +1,7 @@
 # switch2-hub-patcher
 
-Offline patcher that turns one specific USB-C hub into a working **Nintendo Switch 2
-dock**: TV mode, faster docking and correct **HDR colours** on the HDMI port.
+Offline patcher that turns one specific USB-C hub, the **Cable Matters 201031-BLK**,
+into a working **Nintendo Switch 2 dock**: TV mode, faster docking and correct **HDR colours** on the HDMI port.
 
 It takes firmware dumps **you made from your own hub**, applies small hash-checked
 patches and writes new images. It never talks to hardware and contains no vendor
@@ -31,8 +31,9 @@ implemented. Unknown commands still get the stock firmware's "Not supported" rep
 
 ## Supported hardware
 
-Cable Matters USB-C multiport adapter with HDMI, DisplayPort and VGA (VIA VL817 hub
-+ VL103 PD controller, Realtek RTD2142, XTX XT25F16B flash). The patcher only accepts
+**Cable Matters 201031-BLK** USB-C multiport adapter with HDMI, DisplayPort and VGA
+(VIA VL817 hub + VL103 PD controller, Realtek RTD2142, XTX XT25F16B flash). Other
+models, even from Cable Matters, may use different chips or firmware. The patcher only accepts
 these exact stock images and refuses anything else:
 
 | Image | Size | Stock SHA-256 | Patched SHA-256 |
