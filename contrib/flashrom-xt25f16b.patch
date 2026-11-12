@@ -1,0 +1,44 @@
+diff --git a/flashchips/xtx.c b/flashchips/xtx.c
+index bc0ba5ef..4a200f90 100644
+--- a/flashchips/xtx.c
++++ b/flashchips/xtx.c
+@@ -43,6 +43,27 @@
+ 		.voltage	= {MV_2700, MV_3600},
+ 	},
+ 
++	{
++		.vendor		= "XTX Technology Limited",
++		.name		= "XT25F16B",
++		.bustype	= BUS_SPI,
++		.manufacture_id	= XTX_ID,
++		.model_id	= XTX_XT25F16B,
++		.total_size	= SIZE_2MiB,
++		.page_size	= 256,
++		/* OTP: 3 x 256 bytes */
++		.feature_bits	= FEATURE_WRSR_WREN | FEATURE_WRSR_EXT2 | FEATURE_OTP,
++		.tested		= TEST_UNTESTED,
++		.probe		= PROBE_SPI_RDID,
++		.probe_timing	= TIMING_ZERO,
++		.block_erasers	= SPI_ERASERS_20_52_D8_60_C7(SIZE_2MiB),
++		.printlock	= SPI_PRETTYPRINT_STATUS_REGISTER_BP4_SRWD,
++		.unlock		= SPI_DISABLE_BLOCKPROTECT_BP4_SRWD,
++		.write		= SPI_CHIP_WRITE256,
++		.read		= SPI_CHIP_READ,
++		.voltage	= {MV_2700, MV_3600},
++	},
++
+ 	{
+ 		.vendor		= "XTX Technology Limited",
+ 		.name		= "XT25F64B",
+diff --git a/include/flashchips.h b/include/flashchips.h
+index a86eba10..23017b90 100644
+--- a/include/flashchips.h
++++ b/include/flashchips.h
+@@ -1124,6 +1124,7 @@
+ 
+ #define XTX_ID			0x0B	/* XTX Technology Limited */
+ #define XTX_XT25F02E		0x4012
++#define XTX_XT25F16B		0x4015
+ #define XTX_XT25F64B		0x4017
+ #define XTX_XT25F128B		0x4018
+ 
