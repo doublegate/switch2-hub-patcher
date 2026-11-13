@@ -38,6 +38,12 @@ The patch outputs are byte-for-byte unchanged. The hardware-tested images (VL103
   - tests for the CLI, fwupd, status and guide.
 - Repository files: CHANGELOG, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT,
   `.editorconfig`, GitHub Actions CI, issue and PR templates, Dependabot.
+- Published as the public fork [doublegate/switch2-hub-patcher](https://github.com/doublegate/switch2-hub-patcher)
+  of the upstream repository.
+- Release workflow: tagged pushes build the sdist and wheel, test the wheel, and
+  attach both, with SHA-256 sums, to a GitHub release.
+- `.gitattributes` (LF endings, binary firmware, language stats), `CODEOWNERS`,
+  and a CI check that fails on absolute home paths.
 
 ### Changed
 
@@ -48,6 +54,10 @@ The patch outputs are byte-for-byte unchanged. The hardware-tested images (VL103
   tracebacks; nothing is written on failure.
 - README rewritten: Linux and macOS requirements, quick path, command reference,
   safety model, project layout, development, research, credits.
+- `AGENTS.md` imports are home-relative (`@~/.claude/master-core/…`) instead of
+  absolute paths.
+- Project URLs, badges and changelog links point at the fork; upstream is credited
+  and linked.
 - Code formatted with ruff (single quotes, 100 columns). Pyright and ruff configs
   live in `pyproject.toml`. Python 3.9 compatibility is checked.
 
@@ -73,6 +83,6 @@ The patch outputs are byte-for-byte unchanged. The hardware-tested images (VL103
   - RTD2142: HDMI AVI InfoFrame marked BT.2020 when PQ/HLG HDR metadata is present.
 - fwupd quirk for the hub's generic VIA IDs, and flashrom XT25F16B chip patch.
 
-[Unreleased]: https://github.com/mkopec/switch2-hub-patcher/compare/v1.1.0...HEAD
-[1.1.0]: https://github.com/mkopec/switch2-hub-patcher/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/mkopec/switch2-hub-patcher/releases/tag/v1.0.0
+[Unreleased]: https://github.com/doublegate/switch2-hub-patcher/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/doublegate/switch2-hub-patcher/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/doublegate/switch2-hub-patcher/releases/tag/v1.0.0

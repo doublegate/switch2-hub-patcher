@@ -29,6 +29,12 @@ jobs:
         run: ruff format --check .
       - name: pyright
         run: pyright
+      - name: No absolute home paths
+        run: |
+          if git grep -n -E '/Users/[A-Za-z]|/home/[a-z][a-z0-9_-]*/' -- ':!*.patch'; then
+            echo '::error::absolute home paths found; use ~/ or repo-relative paths'
+            exit 1
+          fi
       - name: markdownlint
         run: npx --yes markdownlint-cli2@0.18.1 "**/*.md"
 

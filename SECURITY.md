@@ -4,7 +4,8 @@
 
 Report privately anything that could make the tool write unintended data to a hub,
 bypass a hash or verification check, or harm the host system. Use GitHub's
-**Report a vulnerability** (Security → Advisories) on the repository, or contact the
+**Report a vulnerability** button
+(<https://github.com/doublegate/switch2-hub-patcher/security/advisories/new>), or contact the
 maintainer through the address on their profile. Please don't open a public issue for
 these.
 

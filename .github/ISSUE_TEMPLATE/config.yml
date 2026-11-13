@@ -4,5 +4,5 @@ contact_links:
     url: https://blog.nozomi.space/posts/sw2_dock/
     about: How the patches were found and tested
   - name: Security or brick-risk problem
-    url: https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability
+    url: https://github.com/doublegate/switch2-hub-patcher/security/advisories/new
     about: Report privately; see SECURITY.md

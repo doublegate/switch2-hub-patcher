@@ -33,10 +33,11 @@ dependencies = []
 dev = ["ruff", "pyright"]
 
 [project.urls]
-Homepage = "https://github.com/mkopec/switch2-hub-patcher"
-Source = "https://github.com/mkopec/switch2-hub-patcher"
-Issues = "https://github.com/mkopec/switch2-hub-patcher/issues"
-Changelog = "https://github.com/mkopec/switch2-hub-patcher/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/doublegate/switch2-hub-patcher"
+Source = "https://github.com/doublegate/switch2-hub-patcher"
+Issues = "https://github.com/doublegate/switch2-hub-patcher/issues"
+Changelog = "https://github.com/doublegate/switch2-hub-patcher/blob/main/CHANGELOG.md"
+Upstream = "https://github.com/mkopec/switch2-hub-patcher"
 Background = "https://blog.nozomi.space/posts/sw2_dock/"
 
 [project.scripts]

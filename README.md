@@ -1,5 +1,16 @@
 # switch2-hub-patcher
 
+[![CI](https://github.com/doublegate/switch2-hub-patcher/actions/workflows/ci.yml/badge.svg)](https://github.com/doublegate/switch2-hub-patcher/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/doublegate/switch2-hub-patcher)](https://github.com/doublegate/switch2-hub-patcher/releases)
+![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS-lightgrey)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+> **About this fork.** This is a fork of [mkopec/switch2-hub-patcher](https://github.com/mkopec/switch2-hub-patcher) by the
+> author of the patches. It produces byte-identical patched images and adds dump and
+> flash tooling for Linux and macOS, offline tests, DP-port HDR/VRR research and
+> repository infrastructure. See [CHANGELOG.md](CHANGELOG.md).
+
 Turns one specific USB-C hub, the **Cable Matters 201031-BLK**, into a working
 **Nintendo Switch 2 dock**: TV mode, faster docking, and correct **HDR colours** on the
 HDMI port.
@@ -86,7 +97,9 @@ don't apply. Please don't force them.
   bad flash. Use a CH341A with the 3.3 V fix; the XT25F16B is a 2.7–3.6 V part.
 
 ```sh
+git clone https://github.com/doublegate/switch2-hub-patcher.git && cd switch2-hub-patcher
 pip install .            # or run in place: python3 -m switch2_hub_patcher ...
+# or install a release wheel from https://github.com/doublegate/switch2-hub-patcher/releases
 ```
 
 ## Usage
@@ -287,7 +300,8 @@ It is not part of the patch pipeline.
 ## Credits
 
 - Patches, reverse engineering and the original tool: Michał Kopeć,
-  <https://blog.nozomi.space/posts/sw2_dock/>.
+  <https://blog.nozomi.space/posts/sw2_dock/>, upstream repository
+  [mkopec/switch2-hub-patcher](https://github.com/mkopec/switch2-hub-patcher).
 - The RTD2142 ISP protocol is a port of flashrom's
   [`realtek_mst_i2c_spi`](https://github.com/flashrom/flashrom/blob/main/programmers/realtek_mst_i2c_spi.c)
   programmer.

@@ -1,21 +1,23 @@
 <!-- Managed by Master-Claude. Universal rules come from the imported/inlined core.
      Edit only inside the MC-PROJECT block; mc-sync overwrites everything else. -->
 <!-- mc-core: 0.2.0 | mode=import | lang=python -->
+<!-- Imports are home-relative (Master-Claude core in ~/.claude/master-core); they are
+     optional for contributors without it. Keep paths generic: no absolute home paths. -->
 # AGENTS.md — switch2-hub-patcher
 
-@/Users/parobek/.claude/master-core/AGENTS.base.md
-@/Users/parobek/.claude/master-core/lang/python.md
-@/Users/parobek/.claude/master-core/modules/10-commits-and-versioning.md
-@/Users/parobek/.claude/master-core/modules/20-testing-and-accuracy.md
-@/Users/parobek/.claude/master-core/modules/30-quality-gates.md
-@/Users/parobek/.claude/master-core/modules/40-docs-and-adrs.md
-@/Users/parobek/.claude/master-core/modules/50-architecture-patterns.md
-@/Users/parobek/.claude/master-core/modules/60-security.md
-@/Users/parobek/.claude/master-core/modules/70-release-ceremony.md
-@/Users/parobek/.claude/master-core/modules/80-phase-sprint-workflow.md
-@/Users/parobek/.claude/master-core/modules/90-multi-language-integration.md
-@/Users/parobek/.claude/master-core/modules/91-agent-system-architecture.md
-@/Users/parobek/.claude/master-core/modules/95-named-pattern-library.md
+@~/.claude/master-core/AGENTS.base.md
+@~/.claude/master-core/lang/python.md
+@~/.claude/master-core/modules/10-commits-and-versioning.md
+@~/.claude/master-core/modules/20-testing-and-accuracy.md
+@~/.claude/master-core/modules/30-quality-gates.md
+@~/.claude/master-core/modules/40-docs-and-adrs.md
+@~/.claude/master-core/modules/50-architecture-patterns.md
+@~/.claude/master-core/modules/60-security.md
+@~/.claude/master-core/modules/70-release-ceremony.md
+@~/.claude/master-core/modules/80-phase-sprint-workflow.md
+@~/.claude/master-core/modules/90-multi-language-integration.md
+@~/.claude/master-core/modules/91-agent-system-architecture.md
+@~/.claude/master-core/modules/95-named-pattern-library.md
 
 <<< MC-PROJECT-START >>>
 

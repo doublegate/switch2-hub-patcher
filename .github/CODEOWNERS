@@ -1,0 +1,6 @@
+# Review is required for everything; the hash locks and write paths most of all.
+*                                   @doublegate
+/switch2_hub_patcher/pipeline.py    @doublegate
+/switch2_hub_patcher/asm/           @doublegate
+/switch2_hub_patcher/rtdisp.py      @doublegate
+/switch2_hub_patcher/fwupd.py       @doublegate

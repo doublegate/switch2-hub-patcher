@@ -1,0 +1,14 @@
+# Normalise text to LF in the repository.
+* text=auto eol=lf
+
+# Firmware and vendor databases are binary (and gitignored); never diff or merge them.
+*.bin binary
+*.img binary
+*.rom binary
+
+# Unified diffs must keep their exact bytes, including whitespace-only context lines.
+*.patch -text
+
+# Language statistics: the 8051 sources are the core of the project.
+*.asm linguist-language=Assembly
+research/** linguist-documentation
