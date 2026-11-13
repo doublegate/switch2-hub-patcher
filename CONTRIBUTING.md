@@ -38,8 +38,9 @@ git config core.hooksPath .githooks   # pre-commit/pre-push guards (see below)
 The hooks in `.githooks/` block commits and pushes that contain absolute home paths
 (`/Users/<name>`, `/home/<name>/`), which would leak a username into the public
 repository. CI runs the same check (`.githooks/check-home-paths`). A typical source is
-re-running Master-Claude (`mc-sync`/`mc-setup`), which writes `AGENTS.md` imports with
-`$HOME`; keep them as `@~/.claude/master-core/...`.
+an older Master-Claude (or one run with `--absolute-imports`), which writes `AGENTS.md`
+imports with `$HOME`; keep them as `@~/.claude/master-core/...`. Current Master-Claude
+writes `@~/` itself, and its `mc-sync` converts old absolute imports.
 
 ## Before opening a pull request
 

@@ -1,8 +1,9 @@
 #!/bin/sh
 # Fail if tracked content contains an absolute home path (/Users/<name>, /home/<name>/).
 # Such paths leak a username into the public repository; use ~/ or repo-relative
-# paths instead. Typical source: re-running Master-Claude (mc-sync / mc-setup), which
-# writes AGENTS.md imports as "$HOME/.claude/master-core/...".
+# paths instead. Typical sources: an older Master-Claude (before its home-relative
+# import fix, or run with --absolute-imports) writing AGENTS.md imports as
+# "$HOME/.claude/master-core/...", and pasted tool output.
 #
 # Usage: check-home-paths            check the index (staged content; pre-commit)
 #        check-home-paths <commit>   check that commit's tree (pre-push, CI)

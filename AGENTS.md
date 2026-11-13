@@ -1,8 +1,6 @@
 <!-- Managed by Master-Claude. Universal rules come from the imported/inlined core.
      Edit only inside the MC-PROJECT block; mc-sync overwrites everything else. -->
 <!-- mc-core: 0.2.0 | mode=import | lang=python -->
-<!-- Imports are home-relative (Master-Claude core in ~/.claude/master-core); they are
-     optional for contributors without it. Keep paths generic: no absolute home paths. -->
 # AGENTS.md — switch2-hub-patcher
 
 @~/.claude/master-core/AGENTS.base.md
@@ -40,7 +38,7 @@
 - Supported images are exactly the four hashes in the README table. Never loosen the hash checks to accept other dumps.
 - `OVERLAY_DIGESTS_SDCC_4_6_0` in `pipeline.py` is provisional until a real dump passes the pipeline with SDCC 4.6.0.
 - macOS IOAVService I2C semantics (offset handling, transfer size) are assumptions until a hub is attached; `rtd-flash` writes only after a full same-session read matches the base hash.
-- Absolute home paths must never be committed (public repo): `.githooks/` (enable with `git config core.hooksPath .githooks`) blocks them on commit/push and CI re-checks. Re-running Master-Claude `mc-sync`/`mc-setup` rewrites `AGENTS.md` imports to `$HOME` paths; restore `@~/` before committing.
+- Absolute home paths must never be committed (public repo): `.githooks/` (enable with `git config core.hooksPath .githooks`) blocks them on commit/push and CI re-checks. Master-Claude writes home-relative `@~/` imports (its `mc-sync` converts legacy absolute ones); never run it here with `--absolute-imports`.
 - Never accept a Switch "Dock Update" on a patched hub (no update handler).
 - `*.bin` is gitignored. Never commit firmware dumps or patched images, because they are vendor property.
 - The flashing workflow (fwupd `vli` plugin with `contrib/via-vl817-vl103.quirk`, flashrom `realtek_mst_i2c_spi`) is Linux-only and documented in the README. The patcher itself runs anywhere SDCC does.

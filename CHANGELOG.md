@@ -12,6 +12,17 @@ All notable changes to this project are documented here. The format follows
   that block absolute home paths before they leave the machine; CI now calls the same
   `.githooks/check-home-paths` script.
 
+### Changed
+
+- `AGENTS.md` re-synced with Master-Claude, which now writes home-relative `@~/` imports
+  itself ([Master-Claude#33](https://github.com/doublegate/Master-Claude/pull/33)). The
+  hand-written header note about the imports is gone because it is redundant. The notes in
+  CONTRIBUTING, AGENTS.md and the hook script no longer claim that `mc-sync` re-adds `$HOME`
+  paths.
+- Antigravity CLI (`agy`) gets the Master-Claude core through the `master-claude` agy plugin
+  (Master-Claude `mc-agy.sh`). This project's `AGENTS.md` is 5.6 KB, well under agy's
+  24,000-byte rule-file cap.
+
 ## [1.1.0] - 2026-11-13
 
 The patch outputs are byte-for-byte unchanged. The hardware-tested images (VL103
