@@ -5,6 +5,7 @@ must match the hash of the image that was tested on hardware. A mismatch means
 a different firmware version or a different assembler output; nothing is
 written in that case.
 """
+
 import hashlib
 import shutil
 import subprocess
@@ -25,23 +26,43 @@ RTD2142_STOCK = '17eea7286255892698066e0b46085dcb5a42855f9797f067041c2ee45104d80
 # (name, builder, expected output SHA-256). Order matters: each step requires
 # the exact output of the previous one.
 VL103_STEPS = (
-    ('responder: Nintendo SVID, modes and echo replies', build_target_candidate.build_candidate,
-     'f1c75dbdf48dd806c003b180fda88813d2256400e46e8e9f9619c0b0047015ee'),
-    ('power: 15 V / 2.8 A offer (hub reserve 7 W -> 3 W)', patch_power_15v.build_candidate,
-     '2f59a358e1cd847cbf6aa96a5ba28037cb9287d2d1bef18683ef886b15a79e60'),
-    ('identity: Nintendo VID', patch_identity_vid.build_candidate,
-     'c5cff89182e83862b342e63a0adfcecab3213ce141f6b383b8e608f8a9721a2c'),
-    ('identity: official dock PD3 Discover Identity', patch_identity_pd3.build_candidate,
-     '6ab038bd2dd0bf008e2ffe73b5d237c46cfee17be8ae701f78096aeea9da3beb'),
-    ('query 02 reply', patch_query02.build_candidate,
-     '844d20eb4155e8b5db542d91a6faaa4a00ebebf17b03f8e7bfcacc3bfb8d3d09'),
-    ('query 04/06 version replies', patch_versions.build_candidate,
-     '6b5b0eff3e72be89b1b226739face9194f2ec30812b8c1fda5346cae90f4888e'),
+    (
+        'responder: Nintendo SVID, modes and echo replies',
+        build_target_candidate.build_candidate,
+        'f1c75dbdf48dd806c003b180fda88813d2256400e46e8e9f9619c0b0047015ee',
+    ),
+    (
+        'power: 15 V / 2.8 A offer (hub reserve 7 W -> 3 W)',
+        patch_power_15v.build_candidate,
+        '2f59a358e1cd847cbf6aa96a5ba28037cb9287d2d1bef18683ef886b15a79e60',
+    ),
+    (
+        'identity: Nintendo VID',
+        patch_identity_vid.build_candidate,
+        'c5cff89182e83862b342e63a0adfcecab3213ce141f6b383b8e608f8a9721a2c',
+    ),
+    (
+        'identity: official dock PD3 Discover Identity',
+        patch_identity_pd3.build_candidate,
+        '6ab038bd2dd0bf008e2ffe73b5d237c46cfee17be8ae701f78096aeea9da3beb',
+    ),
+    (
+        'query 02 reply',
+        patch_query02.build_candidate,
+        '844d20eb4155e8b5db542d91a6faaa4a00ebebf17b03f8e7bfcacc3bfb8d3d09',
+    ),
+    (
+        'query 04/06 version replies',
+        patch_versions.build_candidate,
+        '6b5b0eff3e72be89b1b226739face9194f2ec30812b8c1fda5346cae90f4888e',
+    ),
 )
 RTD2142_STEPS = (
-    ('HDMI AVI InfoFrame: BT.2020 when PQ/HLG HDR metadata is present',
-     lambda image: patch_rtd2142_hdr_avi.build(image),
-     'f242d130c7a0947f75bc673eb6100160c3cdb8e1d2f5cb9d1a5dca5332a742f1'),
+    (
+        'HDMI AVI InfoFrame: BT.2020 when PQ/HLG HDR metadata is present',
+        patch_rtd2142_hdr_avi.build,
+        'f242d130c7a0947f75bc673eb6100160c3cdb8e1d2f5cb9d1a5dca5332a742f1',
+    ),
 )
 
 
@@ -77,14 +98,22 @@ class PatchError(Exception):
 def check_toolchain():
     missing = [tool for tool in TOOLCHAIN if shutil.which(tool) is None]
     if missing:
-        raise PatchError(f'SDCC tools not found on PATH: {", ".join(missing)} '
-                         '(install SDCC: apt install sdcc / dnf install sdcc / brew install sdcc)')
+        raise PatchError(
+            f'SDCC tools not found on PATH: {", ".join(missing)} '
+            '(install SDCC: apt install sdcc / dnf install sdcc / brew install sdcc)'
+        )
 
 
 def toolchain_version():
     try:
-        result = subprocess.run(['sdas8051'], text=True, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, timeout=10, check=False)
+        result = subprocess.run(
+            ['sdas8051'],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=10,
+            check=False,
+        )
     except OSError:
         return None
     lines = [line.strip() for line in (result.stdout or '').splitlines() if line.strip()]
@@ -122,8 +151,9 @@ def sha256(data):
 def run(image, stock_sha, steps, log=print, manifests=None):
     """Apply steps in order. If manifests is a list, each step's record is appended."""
     if sha256(image) != stock_sha:
-        raise PatchError(f'input SHA-256 {sha256(image)} is not the supported stock image '
-                         f'{stock_sha}')
+        raise PatchError(
+            f'input SHA-256 {sha256(image)} is not the supported stock image {stock_sha}'
+        )
     check_toolchain()
     for name, builder, expected in steps:
         try:
@@ -133,8 +163,9 @@ def run(image, stock_sha, steps, log=print, manifests=None):
         image, manifest = result if isinstance(result, tuple) else (result, None)
         got = sha256(image)
         if got != expected:
-            raise PatchError(f'step "{name}" produced {got}, expected {expected} '
-                             '(different SDCC output?)')
+            raise PatchError(
+                f'step "{name}" produced {got}, expected {expected} (different SDCC output?)'
+            )
         if manifests is not None:
             manifests.append({'step': name, 'output_sha256': got, 'manifest': manifest})
         log(f'  ok  {name}')
@@ -156,8 +187,10 @@ def _known_images():
             if number == len(steps):
                 known[digest] = f'{chip} patched'
             else:
-                known[digest] = (f'{chip} partly patched (after step {number}/{len(steps)}: '
-                                 f'{name}); not a final image, do not flash')
+                known[digest] = (
+                    f'{chip} partly patched (after step {number}/{len(steps)}: '
+                    f'{name}); not a final image, do not flash'
+                )
     return known
 
 

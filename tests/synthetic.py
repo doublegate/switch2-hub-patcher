@@ -5,6 +5,7 @@ and erased caves the builders check. The builders' SHA-256 guards are pointed at
 these images with unittest.mock, so the whole chain (hooks, caves, overlays, CRC,
 footprint checks) runs without a real dump.
 """
+
 import hashlib
 import random
 from contextlib import ExitStack
@@ -29,21 +30,21 @@ def sha(data):
 
 def _filler(size, seed):
     rng = random.Random(seed)
-    return bytearray(rng.randrange(0, 0xff) for _ in range(size))   # never 0xFF
+    return bytearray(rng.randrange(0, 0xFF) for _ in range(size))  # never 0xFF
 
 
 def vl103_image():
     image = _filler(0x8000, 'vl103')
-    image[0x7000:0x7ffe] = b'\xff' * (0x7ffe - 0x7000)
-    image[patch_svid.TABLE_OFFSET:patch_svid.TABLE_OFFSET + 8] = patch_svid.OLD_TABLE
+    image[0x7000:0x7FFE] = b'\xff' * (0x7FFE - 0x7000)
+    image[patch_svid.TABLE_OFFSET : patch_svid.TABLE_OFFSET + 8] = patch_svid.OLD_TABLE
     at = patch_svid.NDO_INSTRUCTION
-    image[at:at + 5] = patch_svid.OLD_NDO_CALL
+    image[at : at + 5] = patch_svid.OLD_NDO_CALL
     for address, old, _, _ in build_target_candidate.HOOKS:
-        image[address:address + len(old)] = old
-    image[patch_power_15v.HOOK:patch_power_15v.HOOK + 3] = patch_power_15v.OLD
+        image[address : address + len(old)] = old
+    image[patch_power_15v.HOOK : patch_power_15v.HOOK + 3] = patch_power_15v.OLD
     for address, old, _ in patch_identity_vid.REDIRECTS:
-        image[address:address + 3] = old
-    image[patch_identity_pd3.HOOK:patch_identity_pd3.HOOK + 5] = patch_identity_pd3.OLD
+        image[address : address + 3] = old
+    image[patch_identity_pd3.HOOK : patch_identity_pd3.HOOK + 5] = patch_identity_pd3.OLD
     image[-2:] = crc16_usb(bytes(image[:-2])).to_bytes(2, 'little')
     return bytes(image)
 
@@ -52,9 +53,9 @@ def rtd2142_image():
     image = _filler(0x200000, 'rtd2142')
     base = patch_rtd2142_hdr_avi.BANK_BASE
     lo, hi = patch_rtd2142_hdr_avi.REGION
-    image[base + lo:base + hi] = b'\xff' * (hi - lo)
+    image[base + lo : base + hi] = b'\xff' * (hi - lo)
     for at, old, _, _ in patch_rtd2142_hdr_avi.HOOKS:
-        image[base + at:base + at + 3] = old
+        image[base + at : base + at + 3] = old
     return bytes(image)
 
 

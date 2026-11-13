@@ -4,14 +4,16 @@ It models what flashrom's realtek_mst_i2c_spi programmer relies on: ISP mode, th
 indexed-register window, the SPI command engine at 0x60.., the page buffer at 0x70,
 the read stream, and NOR semantics (erase sets 0xFF, programming only clears bits).
 """
+
 from switch2_hub_patcher import rtdisp
 
 
 class FakeRTD(rtdisp.Transport):
     name = 'fake'
 
-    def __init__(self, flash, chunk=128, status=0x00, ident=rtdisp.XT25F16B_ID,
-                 corrupt_program=False):
+    def __init__(
+        self, flash, chunk=128, status=0x00, ident=rtdisp.XT25F16B_ID, corrupt_program=False
+    ):
         self.flash = bytearray(flash)
         self.chunk = chunk
         self.regs = {}
@@ -30,7 +32,9 @@ class FakeRTD(rtdisp.Transport):
         self.reset_requested = False
 
     def _addr(self):
-        return (self.regs.get(0x64, 0) << 16) | (self.regs.get(0x65, 0) << 8) | self.regs.get(0x66, 0)
+        return (
+            (self.regs.get(0x64, 0) << 16) | (self.regs.get(0x65, 0) << 8) | self.regs.get(0x66, 0)
+        )
 
     def write_reg(self, reg, data):
         data = bytes(data)
@@ -78,7 +82,7 @@ class FakeRTD(rtdisp.Transport):
             self.regs[0x67] = self.status_reg
         elif opcode == rtdisp.JEDEC_SE:
             at = self._addr() & ~0xFFF
-            self.flash[at:at + 0x1000] = b'\xff' * 0x1000
+            self.flash[at : at + 0x1000] = b'\xff' * 0x1000
             self.erased.append(at)
         elif opcode == 0x03 and ctrl == 0x47:
             self.stream = (self._addr() + 1) & 0xFFFFFF
@@ -90,16 +94,15 @@ class FakeRTD(rtdisp.Transport):
         length = self.regs.get(0x71, 127) + 1
         data = self.buffer[:length]
         self.buffer = self.buffer[length:]
-        for i, byte in enumerate(data):
-            if self.corrupt_program and i == 0:
-                byte ^= 0x01
+        for i, value in enumerate(data):
+            byte = value ^ 0x01 if self.corrupt_program and i == 0 else value
             self.flash[at + i] &= byte
         self.programmed += len(data)
 
     def read_reg(self, reg, n=1):
         self.selected = reg
         if reg == rtdisp.MCU_MODE:
-            value = (0x80 if self.isp else 0) | 0x10        # buffer empty, no write busy
+            value = (0x80 if self.isp else 0) | 0x10  # buffer empty, no write busy
             return bytes([value])[:n]
         if reg == 0xF5 and self.index_state == 'ready':
             return bytes([self.indexed.get(self.index_addr, 0)])
@@ -112,7 +115,7 @@ class FakeRTD(rtdisp.Transport):
 
     def read_more(self, n):
         if self.selected == rtdisp.MCU_DATA_PORT and self.stream is not None:
-            data = bytes(self.flash[self.stream:self.stream + n])
+            data = bytes(self.flash[self.stream : self.stream + n])
             self.stream += n
             return data
         if self.selected is None:

@@ -4,6 +4,7 @@ The hub's generic VIA IDs need the bundled quirk. Instead of writing to system
 directories, fwupdtool runs with FWUPD_LOCALSTATEDIR pointing at a private state
 directory that holds the quirk, so nothing outside it is changed.
 """
+
 import json
 import os
 import platform
@@ -42,8 +43,11 @@ def prepare_state(directory=None):
 def tool():
     path = shutil.which('fwupdtool')
     if not path:
-        hint = 'brew install fwupd' if platform.system() == 'Darwin' else \
-            'install fwupd (apt install fwupd / dnf install fwupd)'
+        hint = (
+            'brew install fwupd'
+            if platform.system() == 'Darwin'
+            else 'install fwupd (apt install fwupd / dnf install fwupd)'
+        )
         raise FwupdError(f'fwupdtool not found; {hint}')
     return path
 
@@ -51,8 +55,9 @@ def tool():
 def run(args, state=None, timeout=600):
     env = dict(os.environ, FWUPD_LOCALSTATEDIR=str(prepare_state(state)))
     try:
-        result = subprocess.run([tool(), *args], env=env, text=True, capture_output=True,
-                                timeout=timeout, check=False)
+        result = subprocess.run(
+            [tool(), *args], env=env, text=True, capture_output=True, timeout=timeout, check=False
+        )
     except subprocess.TimeoutExpired as exc:
         raise FwupdError(f'fwupdtool {args[0]} timed out') from exc
     return result
@@ -108,8 +113,20 @@ def dump(device_id, state=None):
 
 
 def install(path, device_id, state=None):
-    result = run(['--plugins', 'vli', '--allow-reinstall', '--prepare', '--cleanup',
-                  '--no-reboot-check', 'install-blob', str(path), device_id], state)
+    result = run(
+        [
+            '--plugins',
+            'vli',
+            '--allow-reinstall',
+            '--prepare',
+            '--cleanup',
+            '--no-reboot-check',
+            'install-blob',
+            str(path),
+            device_id,
+        ],
+        state,
+    )
     if result.returncode:
         raise FwupdError('install-blob failed: ' + (result.stderr or result.stdout).strip())
     return result.stdout

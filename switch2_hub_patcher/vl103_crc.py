@@ -9,6 +9,7 @@ Usage:
   vl103_crc.py check IMAGE
   vl103_crc.py fix IMAGE [OUT]     # rewrite the trailer (in place if OUT omitted)
 """
+
 import sys
 
 IMAGE_SIZE = 0x8000
@@ -25,29 +26,29 @@ def crc16_usb(data) -> int:
 
 
 def stored_and_computed(img: bytes):
-    return int.from_bytes(img[-2:], "little"), crc16_usb(img[:-2])
+    return int.from_bytes(img[-2:], 'little'), crc16_usb(img[:-2])
 
 
 def main(argv) -> int:
-    if len(argv) < 3 or argv[1] not in ("check", "fix"):
+    if len(argv) < 3 or argv[1] not in ('check', 'fix'):
         print((__doc__ or '').strip(), file=sys.stderr)
         return 2
-    with open(argv[2], "rb") as f:
+    with open(argv[2], 'rb') as f:
         img = f.read()
     if len(img) != IMAGE_SIZE:
-        print(f"error: expected {IMAGE_SIZE:#x} bytes, got {len(img):#x}", file=sys.stderr)
+        print(f'error: expected {IMAGE_SIZE:#x} bytes, got {len(img):#x}', file=sys.stderr)
         return 1
     stored, computed = stored_and_computed(img)
-    if argv[1] == "check":
+    if argv[1] == 'check':
         ok = stored == computed
-        print(f"stored 0x{stored:04X}  computed 0x{computed:04X}  {'OK' if ok else 'MISMATCH'}")
+        print(f'stored 0x{stored:04X}  computed 0x{computed:04X}  {"OK" if ok else "MISMATCH"}')
         return 0 if ok else 1
     out = argv[3] if len(argv) > 3 else argv[2]
-    with open(out, "wb") as f:
-        f.write(img[:-2] + computed.to_bytes(2, "little"))
-    print(f"wrote {out}: checksum 0x{stored:04X} -> 0x{computed:04X}")
+    with open(out, 'wb') as f:
+        f.write(img[:-2] + computed.to_bytes(2, 'little'))
+    print(f'wrote {out}: checksum 0x{stored:04X} -> 0x{computed:04X}')
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main(sys.argv))

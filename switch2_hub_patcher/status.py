@@ -1,4 +1,5 @@
 """Read-only readiness checklist: tools, hub connection, local images, next step."""
+
 import platform
 import re
 import shutil
@@ -13,8 +14,14 @@ VIA_IDS = {(0x2109, 0x0817), (0x2109, 0x2817)}
 
 def _run(command, timeout=20):
     try:
-        result = subprocess.run(command, text=True, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, timeout=timeout, check=False)
+        result = subprocess.run(
+            command,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout,
+            check=False,
+        )
     except (OSError, subprocess.SubprocessError):
         return None
     return result.stdout
@@ -39,8 +46,12 @@ def usb_ids():
     elif system == 'Linux':
         for device in Path('/sys/bus/usb/devices').glob('*'):
             try:
-                found.add((int((device / 'idVendor').read_text(), 16),
-                           int((device / 'idProduct').read_text(), 16)))
+                found.add(
+                    (
+                        int((device / 'idVendor').read_text(), 16),
+                        int((device / 'idProduct').read_text(), 16),
+                    )
+                )
             except (OSError, ValueError):
                 continue
     return found
@@ -48,13 +59,21 @@ def usb_ids():
 
 def checks(cwd='.'):
     system = platform.system()
-    rows = [(INFO, 'platform', f'{system} {platform.machine()}, Python {platform.python_version()}')]
+    rows = [
+        (INFO, 'platform', f'{system} {platform.machine()}, Python {platform.python_version()}')
+    ]
 
     try:
         pipeline.check_toolchain()
         same = pipeline.overlay_digests() == pipeline.OVERLAY_DIGESTS_SDCC_4_6_0
-        rows.append((OK if same else WARN, 'SDCC', (pipeline.toolchain_version() or '?') +
-                     ('' if same else ' (output differs from 4.6.0 reference)')))
+        rows.append(
+            (
+                OK if same else WARN,
+                'SDCC',
+                (pipeline.toolchain_version() or '?')
+                + ('' if same else ' (output differs from 4.6.0 reference)'),
+            )
+        )
     except pipeline.PatchError as exc:
         rows.append((FAIL, 'SDCC', str(exc)))
 
@@ -69,28 +88,51 @@ def checks(cwd='.'):
         if flashrom:
             chips = _run([flashrom, '-L'], timeout=60) or ''
             programmers = _run([flashrom, '-h']) or ''
-            rows.append((OK if 'XT25F16B' in chips else WARN, 'flashrom XT25F16B',
-                         'supported' if 'XT25F16B' in chips else
-                         'missing (apply contrib/flashrom-xt25f16b.patch, or use rtd-* commands)'))
-            rows.append((OK if 'realtek_mst_i2c_spi' in programmers else WARN,
-                         'flashrom realtek_mst_i2c_spi',
-                         'built in' if 'realtek_mst_i2c_spi' in programmers else
-                         'not built (rtd-* commands of this tool work without flashrom)'))
+            rows.append(
+                (
+                    OK if 'XT25F16B' in chips else WARN,
+                    'flashrom XT25F16B',
+                    'supported'
+                    if 'XT25F16B' in chips
+                    else 'missing (apply contrib/flashrom-xt25f16b.patch, or use rtd-* commands)',
+                )
+            )
+            rows.append(
+                (
+                    OK if 'realtek_mst_i2c_spi' in programmers else WARN,
+                    'flashrom realtek_mst_i2c_spi',
+                    'built in'
+                    if 'realtek_mst_i2c_spi' in programmers
+                    else 'not built (rtd-* commands of this tool work without flashrom)',
+                )
+            )
         else:
             rows.append((INFO, 'flashrom', 'not installed (optional: rtd-* commands replace it)'))
         has_i2c = any(Path('/dev').glob('i2c-*'))
-        rows.append((OK if has_i2c else WARN, 'i2c-dev',
-                     '/dev/i2c-* present' if has_i2c else 'load it: modprobe i2c-dev (as root)'))
+        rows.append(
+            (
+                OK if has_i2c else WARN,
+                'i2c-dev',
+                '/dev/i2c-* present' if has_i2c else 'load it: modprobe i2c-dev (as root)',
+            )
+        )
     elif system == 'Darwin':
         from .i2c import mac_services
+
         services = mac_services()
-        rows.append((OK if services else INFO, 'external display paths',
-                     ', '.join(f"#{s['index']} {s['display'] or '?'}" for s in services) or
-                     'none (hub + monitor not connected)'))
+        rows.append(
+            (
+                OK if services else INFO,
+                'external display paths',
+                ', '.join(f'#{s["index"]} {s["display"] or "?"}' for s in services)
+                or 'none (hub + monitor not connected)',
+            )
+        )
 
     hub = usb_ids() & VIA_IDS
-    rows.append((OK if hub else INFO, 'VIA VL817 hub on USB',
-                 'present' if hub else 'not connected'))
+    rows.append(
+        (OK if hub else INFO, 'VIA VL817 hub on USB', 'present' if hub else 'not connected')
+    )
 
     images = []
     for path in sorted(Path(cwd).glob('*.bin')):

@@ -1,5 +1,59 @@
+# Firmware: dumps, patched images and their manifests are vendor property and
+# never belong in the repository. Report hashes instead.
+*.bin
+*.img
+*.rom
+*-patched.json
+*-stock*.json
+*.manifest.json
+
+# Vendor tool databases and decoded output (research/rtd_db_dump.py)
+DB.bin
+DPCDDB.bin
+IPDB.bin
+fields*.txt
+
+# SDCC by-products when assembling in the tree
+*.rel
+*.ihx
+*.hex
+*.lst
+*.rst
+*.sym
+*.map
+*.mem
+*.lk
+*.noi
+*.adb
+*.cdb
+
+# Python
 __pycache__/
+*.py[cod]
 *.egg-info/
 build/
 dist/
-*.bin
+.eggs/
+*.egg
+.venv/
+venv/
+.python-version
+
+# Tooling caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.pyright/
+.coverage
+htmlcov/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Local agent and session state (AGENTS.md / CLAUDE.md are tracked)
+CLAUDE.local.md
+*.mc-bak

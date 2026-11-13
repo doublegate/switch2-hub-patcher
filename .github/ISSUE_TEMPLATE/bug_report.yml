@@ -1,0 +1,40 @@
+name: Bug report
+description: Something in the tool misbehaves (wrong output, crash, bad message)
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never attach firmware images.** Paste SHA-256 hashes (`switch2-hub-patcher identify *.bin`) instead.
+        For anything that could write unintended data to a hub, use a private security advisory (see SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Tool version
+      description: Output of `switch2-hub-patcher --version`
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Linux, macOS (Apple silicon), other]
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and full output
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Output of `switch2-hub-patcher status` and `switch2-hub-patcher doctor`
+      render: text

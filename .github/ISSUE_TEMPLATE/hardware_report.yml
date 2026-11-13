@@ -1,0 +1,50 @@
+name: Hardware report
+description: Results on a real hub (success or failure), other hub models, or firmware versions
+labels: [hardware]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. These reports decide which hardware and firmware can be supported.
+        **Hashes only, never images.**
+  - type: input
+    id: model
+    attributes:
+      label: Hub model (from the label or box)
+      placeholder: Cable Matters 201031-BLK
+    validations:
+      required: true
+  - type: textarea
+    id: identify
+    attributes:
+      label: identify output for your stock dumps
+      description: '`switch2-hub-patcher identify vl103-stock.bin rtd2142-stock.bin`'
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: Host used for dumping/flashing
+      multiple: true
+      options: [Linux (fwupd + flashrom), Linux (vl103-*/rtd-* commands), macOS (vl103-*/rtd-* commands)]
+  - type: input
+    id: console
+    attributes:
+      label: Switch 2 system version
+      placeholder: '23.0.0'
+  - type: checkboxes
+    id: results
+    attributes:
+      label: Results
+      options:
+        - label: TV mode works
+        - label: Docking without the ~3 s pause
+        - label: HDMI HDR colours correct
+        - label: Charging while docked
+        - label: Restoring stock dumps worked
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes, logs, anything unexpected
+      render: text

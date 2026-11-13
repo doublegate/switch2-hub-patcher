@@ -1,4 +1,5 @@
 """Assemble one patch source with SDCC and load its Intel HEX into a guarded map."""
+
 import re
 import shutil
 import subprocess
@@ -17,8 +18,8 @@ def parse_ihx(text, regions, required=()):
     """
     memory = {}
     ended = False
-    for line in text.splitlines():
-        line = line.strip()
+    for raw in text.splitlines():
+        line = raw.strip()
         if not line:
             continue
         if ended or not line.startswith(':'):
@@ -33,8 +34,9 @@ def parse_ihx(text, regions, required=()):
             for offset, byte in enumerate(record[4:-1]):
                 at = address + offset
                 if at in memory or not any(lo <= at < hi for lo, hi in regions):
-                    raise ValueError(f'overlay byte at {at:#06x} outside guarded regions '
-                                     'or duplicate')
+                    raise ValueError(
+                        f'overlay byte at {at:#06x} outside guarded regions or duplicate'
+                    )
                 memory[at] = byte
         else:
             raise ValueError('unsupported Intel HEX record')
@@ -63,12 +65,19 @@ def assemble_with_symbols(name, regions, required=(), flags='-losg'):
 
 
 def _build(name, regions, required, flags):
-    with tempfile.TemporaryDirectory(prefix=f's2hub-{name}-') as directory:
-        directory = Path(directory)
+    with tempfile.TemporaryDirectory(prefix=f's2hub-{name}-') as tmp:
+        directory = Path(tmp)
         shutil.copyfile(ASM / f'{name}.asm', directory / f'{name}.asm')
         for command in (['sdas8051', flags, f'{name}.asm'], ['sdld', '-n', '-i', f'{name}.rel']):
-            result = subprocess.run(command, cwd=directory, text=True, stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT, timeout=30, check=False)
+            result = subprocess.run(
+                command,
+                cwd=directory,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=30,
+                check=False,
+            )
             if result.returncode:
                 raise RuntimeError(f'{name}: {command[0]} failed:\n{result.stdout}')
         memory = parse_ihx((directory / f'{name}.ihx').read_text(), regions, required)

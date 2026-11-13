@@ -12,11 +12,12 @@ macOS IOAVService I2C path. Writes are deliberately narrow:
 The target itself must also be a known image, so this can only move between the
 stock and patched RTD2142 images that the pipeline produces.
 """
+
 import abc
 import hashlib
 import time
 
-ISP_ADDR = 0x4A               # 7-bit (0x94 >> 1)
+ISP_ADDR = 0x4A  # 7-bit (0x94 >> 1)
 MCU_MODE = 0x6F
 MCU_ISP_MODE_MASK = 0x80
 START_WRITE_XFER = 0xA0
@@ -47,6 +48,7 @@ class Transport(abc.ABC):
     read_reg(reg, n):     select reg, then read n bytes (n <= chunk).
     read_more(n):         read n more bytes from the register selected last.
     """
+
     chunk = 128
     name = 'transport'
 
@@ -60,7 +62,8 @@ class Transport(abc.ABC):
     def read_more(self, n: int) -> bytes: ...
 
     def close(self):
-        pass
+        """Release the transport; optional, most hold nothing."""
+        return None
 
 
 class RealtekISP:
@@ -104,7 +107,7 @@ class RealtekISP:
         self.wr(MCU_MODE, MCU_ISP_MODE_MASK)
         self.wait(MCU_MODE, MCU_ISP_MODE_MASK, MCU_ISP_MODE_MASK)
         self.active = True
-        self.wr(0xF4, 0x9F)   # internal oscillator divider to default (0x06A0 = 0x74)
+        self.wr(0xF4, 0x9F)  # internal oscillator divider to default (0x06A0 = 0x74)
         self.wr(0xF5, 0x06)
         self.wr(0xF4, 0xA0)
         self.wr(0xF5, 0x74)
@@ -124,7 +127,7 @@ class RealtekISP:
         finally:
             self.active = False
             if self.reset_mcu:
-                try:   # flashrom ignores the result: the MCU may not answer while resetting
+                try:  # flashrom ignores the result: the MCU may not answer while resetting
                     if self.mcu_mode() & MCU_ISP_MODE_MASK:
                         value = self.rd(0xEE)
                         self.wr(0xEE, (value & 0xFD) | 0x02)
@@ -183,7 +186,7 @@ class RealtekISP:
         self.wr(0x6A, 0x03)
         self.wr(0x60, 0x47)
         self.wait(0x60, 0x01, 0)
-        self.t.read_reg(MCU_DATA_PORT, 1)            # leading dummy byte
+        self.t.read_reg(MCU_DATA_PORT, 1)  # leading dummy byte
         out = bytearray()
         while len(out) < length:
             n = min(self.t.chunk, length - len(out))
@@ -214,11 +217,11 @@ class RealtekISP:
         self.wr(0x6D, 0x02)
         self.wr(0x71, piece - 1)
         for i in range(0, len(data), piece):
-            part = data[i:i + piece]
+            part = data[i : i + piece]
             if len(part) != piece:
                 self.wr(0x71, len(part) - 1)
             self.map_page(address + i)
-            self.wait(MCU_MODE, 0x10, 0x10)                     # buffer empty
+            self.wait(MCU_MODE, 0x10, 0x10)  # buffer empty
             self.t.write_reg(MCU_DATA_PORT, bytes(part))
             self.wr(MCU_MODE, START_WRITE_XFER)
             self.wait(MCU_MODE, WRITE_XFER_STATUS_MASK, 0)
@@ -239,8 +242,10 @@ def check_chip(isp):
     """RDID and block protection; returns the status register."""
     ident = isp.rdid()
     if ident != XT25F16B_ID:
-        raise ISPError(f'unexpected flash ID {ident.hex()} (XT25F16B is {XT25F16B_ID.hex()}); '
-                       'wrong device or the I2C path does not work')
+        raise ISPError(
+            f'unexpected flash ID {ident.hex()} (XT25F16B is {XT25F16B_ID.hex()}); '
+            'wrong device or the I2C path does not work'
+        )
     status = isp.status()
     return status
 
@@ -261,16 +266,20 @@ def flash(isp, base, target, known, log=print, progress=None):
         return []
     status = check_chip(isp)
     if status & STATUS_BP_MASK:
-        raise ISPError(f'flash status {status:#04x}: block protection is set; not unlocking it '
-                       'here (use flashrom on Linux)')
+        raise ISPError(
+            f'flash status {status:#04x}: block protection is set; not unlocking it '
+            'here (use flashrom on Linux)'
+        )
     log('reading the whole chip to prove the read path and the current content...')
     live = isp.read_range(0, FLASH_SIZE, progress)
     if sha256(live) != sha256(base):
         raise ISPError(f'chip content {sha256(live)} is not the base image; nothing written')
-    log(f'chip matches {known[sha256(base)]}; rewriting {len(sectors)} sector(s): '
-        + ', '.join(f'{s:#08x}' for s in sectors))
+    log(
+        f'chip matches {known[sha256(base)]}; rewriting {len(sectors)} sector(s): '
+        + ', '.join(f'{s:#08x}' for s in sectors)
+    )
     for sector in sectors:
-        want = target[sector:sector + SECTOR]
+        want = target[sector : sector + SECTOR]
         for attempt in (1, 2):
             isp.erase_sector(sector)
             isp.program(sector, want)
@@ -280,13 +289,17 @@ def flash(isp, base, target, known, log=print, progress=None):
                 break
             log(f'  verify failed at {sector:#08x} (attempt {attempt})')
         else:
-            raise ISPError(f'sector {sector:#08x} did not verify. DO NOT power-cycle the hub; '
-                           'rerun the same command, or write the base image back with the '
-                           'same tool or flashrom (SOIC-8 clip as last resort)')
+            raise ISPError(
+                f'sector {sector:#08x} did not verify. DO NOT power-cycle the hub; '
+                'rerun the same command, or write the base image back with the '
+                'same tool or flashrom (SOIC-8 clip as last resort)'
+            )
     log('re-reading the whole chip...')
     final = isp.read_range(0, FLASH_SIZE, progress)
     if sha256(final) != sha256(target):
-        raise ISPError(f'final chip content {sha256(final)} is not the target image; '
-                       'do not power-cycle; rerun the command')
+        raise ISPError(
+            f'final chip content {sha256(final)} is not the target image; '
+            'do not power-cycle; rerun the command'
+        )
     log(f'chip now holds {known[sha256(target)]}')
     return sectors

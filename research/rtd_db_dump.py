@@ -8,6 +8,7 @@ Layout (reverse engineered from the RTD2172 DB in roufsweb/portable-display):
   field marker word 0x052aHHLL (bits HH:LL), name_ptr 12 bytes before it, description
   pointer 16 bytes after. Other chips' databases may use a different pool base.
 """
+
 import re
 import struct
 import sys
@@ -23,7 +24,7 @@ def main(path):
         at = BASE + offset
         if offset >= len(data) or at >= len(data):
             return b''
-        return data[at:data.find(b'\0', at)]
+        return data[at : data.find(b'\0', at)]
 
     registers = []
     for at in range(0x24C, BASE - 16, 4):
@@ -41,8 +42,10 @@ def main(path):
                 field = string(struct.unpack_from('<I', data, f - 12)[0])
                 desc = string(struct.unpack_from('<I', data, f + 16)[0])
                 text = desc.decode(errors='replace').replace('\r', ' | ')[:160]
-                print(f'    [{(word >> 8) & 0xFF}:{word & 0xFF}] '
-                      f'{field.decode(errors="replace")} -- {text}')
+                print(
+                    f'    [{(word >> 8) & 0xFF}:{word & 0xFF}] '
+                    f'{field.decode(errors="replace")} -- {text}'
+                )
 
 
 if __name__ == '__main__':

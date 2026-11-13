@@ -1,4 +1,5 @@
 """I2C transports for rtdisp: Linux /dev/i2c-N and macOS IOAVService (Apple silicon)."""
+
 import ctypes
 import os
 import platform
@@ -14,6 +15,7 @@ class LinuxI2C(Transport):
 
     def __init__(self, bus, address=ISP_ADDR, chunk=128):
         import fcntl
+
         self.name = f'/dev/i2c-{bus}'
         self.fd = os.open(self.name, os.O_RDWR)
         fcntl.ioctl(self.fd, I2C_SLAVE, address)
@@ -46,10 +48,10 @@ _LIBS = {}
 def _frameworks():
     """(CoreFoundation, IOKit) with argument/return types declared; loaded once."""
     if not _LIBS:
-        _LIBS['cf'] = ctypes.cdll.LoadLibrary('/System/Library/Frameworks/CoreFoundation.'
-                                              'framework/CoreFoundation')
-        _LIBS['iokit'] = ctypes.cdll.LoadLibrary('/System/Library/Frameworks/IOKit.framework/'
-                                                 'IOKit')
+        _LIBS['cf'] = ctypes.cdll.LoadLibrary(
+            '/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation'
+        )
+        _LIBS['iokit'] = ctypes.cdll.LoadLibrary('/System/Library/Frameworks/IOKit.framework/IOKit')
         _declare(_LIBS['cf'], _LIBS['iokit'])
     return _LIBS['cf'], _LIBS['iokit']
 
@@ -110,7 +112,7 @@ def _string_property(entry, key):
 
 def edid_name(edid):
     for at in range(54, 126, 18):
-        block = edid[at:at + 18]
+        block = edid[at : at + 18]
         if len(block) == 18 and block[:3] == b'\0\0\0' and block[3] == 0xFC:
             return block[5:].split(b'\n')[0].decode('ascii', 'replace').strip()
     return None
@@ -122,8 +124,9 @@ def mac_services():
         return []
     cf, iokit = _frameworks()
     iterator = ctypes.c_uint32()
-    if iokit.IOServiceGetMatchingServices(0, iokit.IOServiceMatching(b'DCPAVServiceProxy'),
-                                          ctypes.byref(iterator)):
+    if iokit.IOServiceGetMatchingServices(
+        0, iokit.IOServiceMatching(b'DCPAVServiceProxy'), ctypes.byref(iterator)
+    ):
         return []
     found = []
     while True:
@@ -161,14 +164,16 @@ class MacAVI2C(Transport):
     def __init__(self, index=0, address=ISP_ADDR, chunk=32, delay=0.001, retries=3):
         services = mac_services()
         if index >= len(services):
-            raise OSError(f'no external display service #{index} (found {len(services)}); '
-                          'connect the hub to the Mac with a monitor on the hub')
+            raise OSError(
+                f'no external display service #{index} (found {len(services)}); '
+                'connect the hub to the Mac with a monitor on the hub'
+            )
         _, iokit = _frameworks()
         self.iokit = iokit
         self.service = iokit.IOAVServiceCreateWithService(None, services[index]['entry'])
         if not self.service:
             raise OSError('IOAVServiceCreateWithService failed')
-        self.name = f"IOAVService #{index} ({services[index]['display'] or 'unknown display'})"
+        self.name = f'IOAVService #{index} ({services[index]["display"] or "unknown display"})'
         self.address, self.chunk, self.delay, self.retries = address, chunk, delay, retries
         self.selected = None
 

@@ -1,4 +1,5 @@
 """Offline tests of the RTD2142 ISP port against a simulated chip."""
+
 import random
 import sys
 import unittest
@@ -15,7 +16,7 @@ def images():
     rng = random.Random(7)
     base = bytes(rng.randrange(256) for _ in range(rtdisp.FLASH_SIZE))
     target = bytearray(base)
-    target[0x2F31F:0x2F322] = b'\x02\xff\xc1'          # same sector as the HDMI patch
+    target[0x2F31F:0x2F322] = b'\x02\xff\xc1'  # same sector as the HDMI patch
     target[0x2FF80:0x2FFE7] = bytes(range(0x67))
     return base, bytes(target)
 
@@ -37,7 +38,7 @@ class RealtekISPTests(unittest.TestCase):
         chip = FakeRTD(BASE)
         self.assertEqual(self.run_isp(chip, lambda isp: isp.rdid()), rtdisp.XT25F16B_ID)
         self.assertTrue(chip.reset_requested)
-        self.assertEqual(chip.indexed[rtdisp.GPIO_VALUE_ADDRESS] & 1, 0)   # strap released
+        self.assertEqual(chip.indexed[rtdisp.GPIO_VALUE_ADDRESS] & 1, 0)  # strap released
 
     def test_dump_matches_flash(self):
         for chunk in (128, 32, 16):
@@ -72,8 +73,7 @@ class RealtekISPTests(unittest.TestCase):
     def test_unknown_images_refused(self):
         chip = FakeRTD(BASE)
         with self.assertRaisesRegex(rtdisp.ISPError, 'target image is not a known'):
-            self.run_isp(chip, lambda isp: rtdisp.flash(isp, BASE, BASE[:-1] + b'x', KNOWN,
-                                                          quiet))
+            self.run_isp(chip, lambda isp: rtdisp.flash(isp, BASE, BASE[:-1] + b'x', KNOWN, quiet))
         self.assertEqual(chip.erased, [])
 
     def test_block_protection_refused(self):
@@ -86,7 +86,7 @@ class RealtekISPTests(unittest.TestCase):
         chip = FakeRTD(BASE, corrupt_program=True)
         with self.assertRaisesRegex(rtdisp.ISPError, 'did not verify'):
             self.run_isp(chip, lambda isp: rtdisp.flash(isp, BASE, TARGET, KNOWN, quiet))
-        self.assertEqual(chip.erased, [0x2F000, 0x2F000])   # one retry, then stop
+        self.assertEqual(chip.erased, [0x2F000, 0x2F000])  # one retry, then stop
 
 
 if __name__ == '__main__':

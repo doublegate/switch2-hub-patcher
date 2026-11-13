@@ -3,6 +3,7 @@
 Patching is offline. Dumping and flashing (vl103-*, rtd-*) talk to the hub through
 fwupd and DP AUX I2C on Linux and macOS, with hash-checked, read-back-verified writes.
 """
+
 import argparse
 import json
 import platform
@@ -33,7 +34,7 @@ def error(message):
 
 
 def write_new(path, data):
-    with open(path, 'xb') as f:          # refuse to overwrite anything
+    with open(path, 'xb') as f:  # refuse to overwrite anything
         f.write(data)
 
 
@@ -54,10 +55,15 @@ def cmd_patch(args, patcher):
     try:
         write_new(args.output, image)
         if args.manifest:
-            record = {'tool': f'switch2-hub-patcher {__version__}', 'assembler': toolchain_version(),
-                      'input': str(args.input), 'input_sha256': sha256(source),
-                      'output': str(args.output), 'output_sha256': sha256(image),
-                      'steps': manifests}
+            record = {
+                'tool': f'switch2-hub-patcher {__version__}',
+                'assembler': toolchain_version(),
+                'input': str(args.input),
+                'input_sha256': sha256(source),
+                'output': str(args.output),
+                'output_sha256': sha256(image),
+                'steps': manifests,
+            }
             write_new(args.manifest, (json.dumps(record, indent=1) + '\n').encode())
     except OSError as exc:
         return error(f'cannot write output: {exc.strerror or exc}')
@@ -90,12 +96,14 @@ def cmd_doctor():
     for name, digest in digests.items():
         same = OVERLAY_DIGESTS_SDCC_4_6_0.get(name) == digest
         ok &= same
-        print(f"  {'ok ' if same else 'DIFF'} {name:18} {digest[:16]}")
+        print(f'  {"ok " if same else "DIFF"} {name:18} {digest[:16]}')
     if ok:
         print('assembled patches match the SDCC 4.6.0 reference output')
         return 0
-    print('assembled output differs from the SDCC 4.6.0 reference; patching will most likely '
-          'fail its hash checks (nothing would be written). Try SDCC 4.6.0.')
+    print(
+        'assembled output differs from the SDCC 4.6.0 reference; patching will most likely '
+        'fail its hash checks (nothing would be written). Try SDCC 4.6.0.'
+    )
     return 1
 
 
@@ -115,9 +123,11 @@ def cmd_survey(args):
 def open_transport(args):
     if getattr(args, 'bus', None) is not None:
         from .i2c import LinuxI2C
+
         return LinuxI2C(args.bus, chunk=args.chunk or 128)
     if platform.system() == 'Darwin':
         from .i2c import MacAVI2C
+
         return MacAVI2C(args.mac_service, chunk=args.chunk or 32)
     raise OSError('give --bus N (Linux /dev/i2c-N, see find-aux)')
 
@@ -132,6 +142,7 @@ def progress_printer(total):
             print(f'\r  {pct:3d}%', end='', file=sys.stderr, flush=True)
             if done >= total:
                 print(file=sys.stderr)
+
     return show
 
 
@@ -153,11 +164,16 @@ def cmd_rtd_probe(args):
     def action(isp):
         ident = isp.rdid()
         status = isp.status()
-        print(f'flash ID {ident.hex()} ' + ('(XT25F16B)' if ident == rtdisp.XT25F16B_ID
-                                             else '(UNEXPECTED)'))
-        print(f'status register {status:#04x}' + ('  block protection set'
-                                                   if status & rtdisp.STATUS_BP_MASK else ''))
+        print(
+            f'flash ID {ident.hex()} '
+            + ('(XT25F16B)' if ident == rtdisp.XT25F16B_ID else '(UNEXPECTED)')
+        )
+        print(
+            f'status register {status:#04x}'
+            + ('  block protection set' if status & rtdisp.STATUS_BP_MASK else '')
+        )
         return 0 if ident == rtdisp.XT25F16B_ID else 1
+
     return run_isp(args, action)
 
 
@@ -176,13 +192,16 @@ def cmd_rtd_dump(args):
         write_new(args.output, reads[0])
         print(f'{args.output}: {identify(reads[0])}')
         return 0
+
     return run_isp(args, action)
 
 
 def cmd_rtd_flash(args):
     if not args.allow_brick:
-        return error('writing can brick the hub; pass --allow-brick once you have your stock '
-                     'dump and a recovery plan (SOIC-8 clip)')
+        return error(
+            'writing can brick the hub; pass --allow-brick once you have your stock '
+            'dump and a recovery plan (SOIC-8 clip)'
+        )
     try:
         target = Path(args.target).read_bytes()
         base = Path(args.base).read_bytes()
@@ -190,14 +209,18 @@ def cmd_rtd_flash(args):
         return error(f'cannot read image: {exc.strerror or exc}')
     known = {RTD2142_STOCK: 'RTD2142 stock', RTD2142_STEPS[-1][2]: 'RTD2142 patched'}
     if platform.system() == 'Darwin' and args.bus is None:
-        print('warning: macOS writes go through the private IOAVService I2C API. The tool '
-              'only writes after a full read of the chip matches the base image, but a first '
-              'write is safer on Linux with flashrom.')
+        print(
+            'warning: macOS writes go through the private IOAVService I2C API. The tool '
+            'only writes after a full read of the chip matches the base image, but a first '
+            'write is safer on Linux with flashrom.'
+        )
 
     def action(isp):
-        rtdisp.flash(isp, base, target, known, log=print,
-                     progress=progress_printer(rtdisp.FLASH_SIZE))
+        rtdisp.flash(
+            isp, base, target, known, log=print, progress=progress_printer(rtdisp.FLASH_SIZE)
+        )
         return 0
+
     return run_isp(args, action)
 
 
@@ -216,7 +239,7 @@ def cmd_vl103_devices():
         return 1
     for d in found:
         mark = '  <- VL103 PD' if fwupd.is_pd(d) else ''
-        print(f"{d['DeviceId'][:12]}  {d.get('Name', '?')}  version {d.get('Version', '?')}{mark}")
+        print(f'{d["DeviceId"][:12]}  {d.get("Name", "?")}  version {d.get("Version", "?")}{mark}')
     return 0
 
 
@@ -225,7 +248,7 @@ def cmd_vl103_dump(args):
         return error(f'{args.output} already exists; refusing to overwrite')
     try:
         device = vl103_device(args)
-        print(f"device {device['DeviceId'][:12]} {device.get('Name', '')}")
+        print(f'device {device["DeviceId"][:12]} {device.get("Name", "")}')
         reads = []
         for n in range(args.reads):
             reads.append(fwupd.dump(device['DeviceId']))
@@ -241,8 +264,10 @@ def cmd_vl103_dump(args):
 
 def cmd_vl103_flash(args):
     if not args.allow_brick:
-        return error('writing can brick the hub; pass --allow-brick once you have your stock '
-                     'dump and a recovery plan')
+        return error(
+            'writing can brick the hub; pass --allow-brick once you have your stock '
+            'dump and a recovery plan'
+        )
     try:
         target = Path(args.target).read_bytes()
         base = Path(args.base).read_bytes()
@@ -258,52 +283,80 @@ def cmd_vl103_flash(args):
     try:
         device = vl103_device(args)
         device_id = device['DeviceId']
-        print(f"device {device_id[:12]} {device.get('Name', '')}")
+        print(f'device {device_id[:12]} {device.get("Name", "")}')
         live = fwupd.dump(device_id)
         if sha256(live) != sha256(base):
-            return error(f'the hub holds {identify(live)} ({sha256(live)}), not the base image; '
-                         'nothing written')
+            return error(
+                f'the hub holds {identify(live)} ({sha256(live)}), not the base image; '
+                'nothing written'
+            )
         print(f'hub holds {known[sha256(base)]}; installing {known[sha256(target)]}...')
         fwupd.install(args.target, device_id)
         after = fwupd.dump(vl103_device(args)['DeviceId'])
     except fwupd.FwupdError as exc:
-        return error(f'{exc}\nif the hub misbehaves, install your stock dump the same way '
-                     '(vl103-flash STOCK --base PATCHED) before power-cycling')
+        return error(
+            f'{exc}\nif the hub misbehaves, install your stock dump the same way '
+            '(vl103-flash STOCK --base PATCHED) before power-cycling'
+        )
     if sha256(after) != sha256(target):
-        return error(f'read-back {sha256(after)} is not the target image; reinstall before '
-                     'unplugging')
+        return error(
+            f'read-back {sha256(after)} is not the target image; reinstall before unplugging'
+        )
     print(f'read-back matches {known[sha256(target)]}. Unplug and replug the hub to restart it.')
     return 0
 
 
 def add_transport_args(p):
     p.add_argument('--bus', type=int, help='Linux: /dev/i2c-N of the hub (see find-aux)')
-    p.add_argument('--mac-service', type=int, default=0,
-                   help='macOS: external display path index from find-aux --probe (default 0)')
-    p.add_argument('--chunk', type=int, choices=(16, 32, 64, 128),
-                   help='bytes per I2C transfer (default 128 Linux, 32 macOS)')
-    p.add_argument('--no-reset', action='store_true',
-                   help='do not reset the hub MCU when done (flashrom reset_mcu=0)')
+    p.add_argument(
+        '--mac-service',
+        type=int,
+        default=0,
+        help='macOS: external display path index from find-aux --probe (default 0)',
+    )
+    p.add_argument(
+        '--chunk',
+        type=int,
+        choices=(16, 32, 64, 128),
+        help='bytes per I2C transfer (default 128 Linux, 32 macOS)',
+    )
+    p.add_argument(
+        '--no-reset',
+        action='store_true',
+        help='do not reset the hub MCU when done (flashrom reset_mcu=0)',
+    )
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog='switch2-hub-patcher', description=(__doc__ or '').splitlines()[0])
+    ap = argparse.ArgumentParser(
+        prog='switch2-hub-patcher', description=(__doc__ or '').splitlines()[0]
+    )
     ap.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     sub = ap.add_subparsers(dest='command', required=True)
-    for name, helptext in (('vl103', 'patch a VL103 PD firmware dump (32 KiB)'),
-                           ('rtd2142', 'patch an RTD2142 flash dump (2 MiB)')):
+    for name, helptext in (
+        ('vl103', 'patch a VL103 PD firmware dump (32 KiB)'),
+        ('rtd2142', 'patch an RTD2142 flash dump (2 MiB)'),
+    ):
         p = sub.add_parser(name, help=helptext)
         p.add_argument('input')
         p.add_argument('output', help='must not exist')
-        p.add_argument('--manifest', metavar='JSON',
-                       help='also write a per-step record of every changed byte (must not exist)')
+        p.add_argument(
+            '--manifest',
+            metavar='JSON',
+            help='also write a per-step record of every changed byte (must not exist)',
+        )
     p = sub.add_parser('identify', help='report whether files are known stock/patched images')
     p.add_argument('files', nargs='+')
     sub.add_parser('doctor', help='check SDCC and that it assembles the patches as expected')
-    p = sub.add_parser('find-aux', help='find the hub\'s DP AUX I2C path (Linux /dev/i2c-N, '
-                                        'macOS display service); read-only')
-    p.add_argument('--probe', action='store_true',
-                   help='macOS: ask each external display path whether a Realtek ISP answers')
+    p = sub.add_parser(
+        'find-aux',
+        help="find the hub's DP AUX I2C path (Linux /dev/i2c-N, macOS display service); read-only",
+    )
+    p.add_argument(
+        '--probe',
+        action='store_true',
+        help='macOS: ask each external display path whether a Realtek ISP answers',
+    )
     sub.add_parser('status', help='readiness checklist and the next step (read-only)')
     sub.add_parser('guide', help='interactive walk-through: dump, patch, flash (asks each step)')
     sub.add_parser('vl103-devices', help='list VIA hub devices fwupd sees (bundled quirk applied)')
@@ -311,8 +364,11 @@ def main(argv=None):
     p.add_argument('output')
     p.add_argument('--reads', type=int, default=2, help='dumps that must agree (default 2)')
     p.add_argument('--device-id', help='fwupd device ID (prefix), if not detected')
-    p = sub.add_parser('vl103-flash', help='install a known VL103 stock/patched image via fwupd, '
-                                           'with live pre-check and read-back')
+    p = sub.add_parser(
+        'vl103-flash',
+        help='install a known VL103 stock/patched image via fwupd, '
+        'with live pre-check and read-back',
+    )
     p.add_argument('target')
     p.add_argument('--base', required=True, help='image the hub holds now')
     p.add_argument('--device-id')
@@ -323,15 +379,23 @@ def main(argv=None):
     p.add_argument('output')
     p.add_argument('--reads', type=int, default=2, help='full reads that must agree (default 2)')
     add_transport_args(p)
-    p = sub.add_parser('rtd-flash', help='move the RTD2142 between known stock/patched images, '
-                                         'rewriting only changed sectors')
+    p = sub.add_parser(
+        'rtd-flash',
+        help='move the RTD2142 between known stock/patched images, rewriting only changed sectors',
+    )
     p.add_argument('target', help='image to write (known stock or patched)')
-    p.add_argument('--base', required=True, help='image the chip holds now (your stock dump, '
-                                                 'or the patched image when restoring)')
+    p.add_argument(
+        '--base',
+        required=True,
+        help='image the chip holds now (your stock dump, or the patched image when restoring)',
+    )
     p.add_argument('--allow-brick', action='store_true')
     add_transport_args(p)
-    p = sub.add_parser('survey', help='research: list RTD2142 code touching DP/HDMI '
-                                      'colorimetry and VRR registers (read-only)')
+    p = sub.add_parser(
+        'survey',
+        help='research: list RTD2142 code touching DP/HDMI '
+        'colorimetry and VRR registers (read-only)',
+    )
     p.add_argument('dump')
     args = ap.parse_args(argv)
     if args.command == 'vl103':
@@ -346,6 +410,7 @@ def main(argv=None):
         return status.report(status.checks())
     if args.command == 'guide':
         from . import guide
+
         try:
             return guide.run(sys.modules[__name__])
         except (EOFError, KeyboardInterrupt):

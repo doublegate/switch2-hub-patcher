@@ -4,6 +4,7 @@ Walks /sys/class/drm connectors, reads the DPCD branch-device block (0x500..0x50
 through /dev/drm_dp_auxN and reports which /dev/i2c-N belongs to a Realtek branch
 device. Never writes to any device.
 """
+
 import platform
 from pathlib import Path
 
@@ -39,8 +40,15 @@ def scan(sysfs='/sys/class/drm', dev='/dev', reader=read_branch):
     if not root.is_dir():
         return results
     for connector in sorted(root.glob('card*-DP-*')):
-        record = {'connector': connector.name, 'status': None, 'aux': None, 'i2c': None,
-                  'i2c_dev_present': False, 'branch': None, 'error': None}
+        record = {
+            'connector': connector.name,
+            'status': None,
+            'aux': None,
+            'i2c': None,
+            'i2c_dev_present': False,
+            'branch': None,
+            'error': None,
+        }
         status = connector / 'status'
         if status.is_file():
             record['status'] = status.read_text().strip()
@@ -67,24 +75,28 @@ def programmer_string(bus):
 def report(records, out=print):
     """Print a human-readable summary; return 0 if exactly one Realtek bus is usable."""
     if not records:
-        out('no DisplayPort connectors under /sys/class/drm (Linux with an AMD/Intel GPU '
-            'and a DP-capable USB-C port is required)')
+        out(
+            'no DisplayPort connectors under /sys/class/drm (Linux with an AMD/Intel GPU '
+            'and a DP-capable USB-C port is required)'
+        )
         return 1
     candidates = []
     for r in records:
-        line = f"{r['connector']}: {r['status'] or '?'}"
+        line = f'{r["connector"]}: {r["status"] or "?"}'
         if r['aux']:
-            line += f"  aux=/dev/{r['aux']}"
+            line += f'  aux=/dev/{r["aux"]}'
         if r['i2c']:
-            line += f"  i2c=/dev/{r['i2c']}" + ('' if r['i2c_dev_present'] else ' (missing)')
+            line += f'  i2c=/dev/{r["i2c"]}' + ('' if r['i2c_dev_present'] else ' (missing)')
         b = r['branch']
         if b:
-            line += (f"  branch OUI {b['oui']} id '{b['device_id']}' hw {b['hw_rev']} "
-                     f"fw {b['fw_rev']}" + ('  <- Realtek' if b['realtek'] else ''))
+            line += (
+                f"  branch OUI {b['oui']} id '{b['device_id']}' hw {b['hw_rev']} "
+                f'fw {b["fw_rev"]}' + ('  <- Realtek' if b['realtek'] else '')
+            )
             if b['realtek'] and r['i2c']:
                 candidates.append(r)
         if r['error']:
-            line += f"  DPCD read failed: {r['error']}"
+            line += f'  DPCD read failed: {r["error"]}'
         out(line)
     if any(r['i2c'] and not r['i2c_dev_present'] for r in records):
         out('note: /dev/i2c-* nodes missing; load the driver with: sudo modprobe i2c-dev')
@@ -94,8 +106,10 @@ def report(records, out=print):
         out(f'  -p {programmer_string(bus)}')
         return 0 if candidates[0]['i2c_dev_present'] else 1
     if not candidates:
-        out('\nno Realtek (OUI 00e04c) branch device found; connect the hub to the PC with '
-            'a monitor on the hub, and run as root so DPCD can be read')
+        out(
+            '\nno Realtek (OUI 00e04c) branch device found; connect the hub to the PC with '
+            'a monitor on the hub, and run as root so DPCD can be read'
+        )
     else:
         out('\nmore than one Realtek branch device; disconnect the others and retry')
     return 1
@@ -104,13 +118,17 @@ def report(records, out=print):
 def mac_report(services, probe=None, out=print):
     """List external display paths on macOS; optionally probe each for the RTD2142 ISP."""
     if not services:
-        out('no external display found. Connect the hub to a USB-C/Thunderbolt port with a '
-            'monitor on the hub, and make sure macOS shows the monitor')
+        out(
+            'no external display found. Connect the hub to a USB-C/Thunderbolt port with a '
+            'monitor on the hub, and make sure macOS shows the monitor'
+        )
         return 1
     hits = []
     for s in services:
-        line = f"service #{s['index']}: {s['display'] or 'unknown display'}  " \
-               f"(registry id {s['registry_id']:#x})"
+        line = (
+            f'service #{s["index"]}: {s["display"] or "unknown display"}  '
+            f'(registry id {s["registry_id"]:#x})'
+        )
         if probe:
             try:
                 mode = probe(s['index'])
@@ -137,6 +155,7 @@ def main(probe=False):
                 return rtdisp.RealtekISP(transport, log=None).mcu_mode()
             finally:
                 transport.close()
+
         return mac_report(i2c.mac_services(), probe_service if probe else None)
     if platform.system() != 'Linux':
         print('find-aux supports Linux (/dev/i2c-* on DP AUX) and macOS (IOAVService)')

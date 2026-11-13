@@ -2,6 +2,7 @@
 
 Set S2HUB_VL103_DUMP and/or S2HUB_RTD2142_DUMP to your own stock dumps to run them.
 """
+
 import contextlib
 import io
 import json
@@ -62,27 +63,40 @@ class OfflineTests(unittest.TestCase):
             self.assertTrue((asm / f'{name}.asm').is_file(), name)
 
     def test_step_hash_chain_matches_readme(self):
-        self.assertEqual(pipeline.VL103_STEPS[-1][2],
-                         '6b5b0eff3e72be89b1b226739face9194f2ec30812b8c1fda5346cae90f4888e')
-        self.assertEqual(pipeline.RTD2142_STEPS[-1][2],
-                         'f242d130c7a0947f75bc673eb6100160c3cdb8e1d2f5cb9d1a5dca5332a742f1')
+        self.assertEqual(
+            pipeline.VL103_STEPS[-1][2],
+            '6b5b0eff3e72be89b1b226739face9194f2ec30812b8c1fda5346cae90f4888e',
+        )
+        self.assertEqual(
+            pipeline.RTD2142_STEPS[-1][2],
+            'f242d130c7a0947f75bc673eb6100160c3cdb8e1d2f5cb9d1a5dca5332a742f1',
+        )
         readme = (Path(__file__).resolve().parents[1] / 'README.md').read_text()
-        for digest in (pipeline.VL103_STOCK, pipeline.RTD2142_STOCK,
-                       pipeline.VL103_STEPS[-1][2], pipeline.RTD2142_STEPS[-1][2]):
+        for digest in (
+            pipeline.VL103_STOCK,
+            pipeline.RTD2142_STOCK,
+            pipeline.VL103_STEPS[-1][2],
+            pipeline.RTD2142_STEPS[-1][2],
+        ):
             self.assertIn(digest, readme)
 
     def test_missing_toolchain_is_a_clean_error(self):
-        with mock.patch.object(pipeline.shutil, 'which', return_value=None), \
-             mock.patch.object(pipeline, 'sha256', return_value=pipeline.VL103_STOCK), \
-             self.assertRaisesRegex(pipeline.PatchError, 'SDCC tools not found'):
+        with (
+            mock.patch.object(pipeline.shutil, 'which', return_value=None),
+            mock.patch.object(pipeline, 'sha256', return_value=pipeline.VL103_STOCK),
+            self.assertRaisesRegex(pipeline.PatchError, 'SDCC tools not found'),
+        ):
             pipeline.patch_vl103(b'', log=quiet)
 
     def test_builder_failure_becomes_patch_error(self):
         def broken(_):
             raise ValueError('hook guard failed at 0x5d3f')
+
         steps = (('broken step', broken, '0' * 64),)
-        with mock.patch.object(pipeline, 'check_toolchain'), \
-             self.assertRaisesRegex(pipeline.PatchError, 'broken step.*hook guard'):
+        with (
+            mock.patch.object(pipeline, 'check_toolchain'),
+            self.assertRaisesRegex(pipeline.PatchError, 'broken step.*hook guard'),
+        ):
             pipeline.run(b'x', pipeline.sha256(b'x'), steps, log=quiet)
 
     def test_identify(self):
@@ -108,8 +122,13 @@ class CliTests(unittest.TestCase):
     def test_refuses_existing_output_and_manifest(self):
         (self.dir / 'in.bin').write_bytes(b'')
         (self.dir / 'm.json').write_text('{}')
-        code, _, err = run_cli('vl103', str(self.dir / 'in.bin'), str(self.dir / 'out.bin'),
-                               '--manifest', str(self.dir / 'm.json'))
+        code, _, err = run_cli(
+            'vl103',
+            str(self.dir / 'in.bin'),
+            str(self.dir / 'out.bin'),
+            '--manifest',
+            str(self.dir / 'm.json'),
+        )
         self.assertEqual(code, 1)
         self.assertIn('refusing to overwrite', err)
 
@@ -127,8 +146,12 @@ class CliTests(unittest.TestCase):
             assert manifests is not None
             manifests.append({'step': 's', 'output_sha256': 'x', 'manifest': {'k': 1}})
             return b'patched'
-        args = mock.Mock(input=str(self.dir / 'in.bin'), output=str(self.dir / 'out.bin'),
-                         manifest=str(self.dir / 'm.json'))
+
+        args = mock.Mock(
+            input=str(self.dir / 'in.bin'),
+            output=str(self.dir / 'out.bin'),
+            manifest=str(self.dir / 'm.json'),
+        )
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(cli.cmd_patch(args, patcher), 0)
         record = json.loads((self.dir / 'm.json').read_text())
@@ -161,7 +184,9 @@ class DpAuxTests(unittest.TestCase):
         info = dpaux.parse_branch(block)
         assert info is not None
         self.assertTrue(info['realtek'])
-        self.assertEqual((info['device_id'], info['hw_rev'], info['fw_rev']), ('2142', '1.0', '3.7'))
+        self.assertEqual(
+            (info['device_id'], info['hw_rev'], info['fw_rev']), ('2142', '1.0', '3.7')
+        )
         self.assertIsNone(dpaux.parse_branch(b'\0' * 3))
 
     def test_finds_single_realtek_bus(self):
@@ -170,8 +195,10 @@ class DpAuxTests(unittest.TestCase):
         self.connector('card1-DP-3', 'disconnected', 'drm_dp_aux2', 9)
         (self.dev / 'i2c-7').touch()
         (self.dev / 'i2c-8').touch()
-        blocks = {'drm_dp_aux0': bytes.fromhex('00e04c') + b'\0' * 9,
-                  'drm_dp_aux1': bytes.fromhex('001cf8') + b'\0' * 9}
+        blocks = {
+            'drm_dp_aux0': bytes.fromhex('00e04c') + b'\0' * 9,
+            'drm_dp_aux1': bytes.fromhex('001cf8') + b'\0' * 9,
+        }
         records = dpaux.scan(str(self.sys), str(self.dev), lambda p: blocks[Path(p).name])
         lines = []
         self.assertEqual(dpaux.report(records, lines.append), 0)
@@ -179,8 +206,9 @@ class DpAuxTests(unittest.TestCase):
 
     def test_missing_i2c_dev_is_reported(self):
         self.connector('card0-DP-1', 'connected', 'drm_dp_aux0', 4)
-        records = dpaux.scan(str(self.sys), str(self.dev),
-                             lambda _: bytes.fromhex('00e04c') + b'\0' * 9)
+        records = dpaux.scan(
+            str(self.sys), str(self.dev), lambda _: bytes.fromhex('00e04c') + b'\0' * 9
+        )
         lines = []
         self.assertEqual(dpaux.report(records, lines.append), 1)
         self.assertIn('modprobe i2c-dev', '\n'.join(lines))
@@ -190,18 +218,20 @@ class DpAuxTests(unittest.TestCase):
 
         def denied(_):
             raise PermissionError(13, 'Permission denied')
+
         lines = []
-        self.assertEqual(dpaux.report(dpaux.scan(str(self.sys), str(self.dev), denied),
-                                      lines.append), 1)
+        self.assertEqual(
+            dpaux.report(dpaux.scan(str(self.sys), str(self.dev), denied), lines.append), 1
+        )
         self.assertIn('run as root', '\n'.join(lines))
 
 
 class SurveyTests(unittest.TestCase):
     def test_xrefs_finds_writes_and_reads(self):
         image = bytearray(0x30000)
-        image[0x21234:0x21238] = bytes.fromhex('90 4d b6 f0')    # bank 2: write MISC1
-        image[0x00100:0x00104] = bytes.fromhex('90 5b 6b e0')    # bank 0: read HDMI pkt enable
-        image[0x00200:0x00204] = bytes.fromhex('90 12 34 f0')    # unknown register
+        image[0x21234:0x21238] = bytes.fromhex('90 4d b6 f0')  # bank 2: write MISC1
+        image[0x00100:0x00104] = bytes.fromhex('90 5b 6b e0')  # bank 0: read HDMI pkt enable
+        image[0x00200:0x00204] = bytes.fromhex('90 12 34 f0')  # unknown register
         refs = rtd2142_map.xrefs(bytes(image))
         self.assertEqual(refs[0x4DB6], [(2, 0x1234, 0xF0)])
         self.assertEqual(refs[0x5B6B], [(0, 0x0100, 0xE0)])
@@ -231,7 +261,9 @@ class AssemblerTests(unittest.TestCase):
     def test_overlay_digests(self):
         digests = pipeline.overlay_digests()
         if digests != pipeline.OVERLAY_DIGESTS_SDCC_4_6_0:
-            self.skipTest(f'assembler output differs from SDCC 4.6.0 ({pipeline.toolchain_version()})')
+            self.skipTest(
+                f'assembler output differs from SDCC 4.6.0 ({pipeline.toolchain_version()})'
+            )
 
     def test_synthetic_vl103_chain(self):
         image = synthetic.vl103_image()
@@ -246,7 +278,7 @@ class AssemblerTests(unittest.TestCase):
     def test_synthetic_rtd2142(self):
         image, manifest = synthetic.run_rtd2142(synthetic.rtd2142_image())
         self.assertEqual(manifest['banks_changed'], [2])
-        self.assertEqual(manifest['changed_byte_count'], 108)   # matches the published patch size
+        self.assertEqual(manifest['changed_byte_count'], 108)  # matches the published patch size
         if pipeline.overlay_digests() == pipeline.OVERLAY_DIGESTS_SDCC_4_6_0:
             self.assertEqual(synthetic.sha(image), SYNTHETIC_RTD2142)
 
@@ -259,7 +291,7 @@ class AssemblerTests(unittest.TestCase):
 
     def test_builders_reject_bad_guards(self):
         image = bytearray(synthetic.vl103_image())
-        image[0x7800] = 0   # CODE cave no longer erased
+        image[0x7800] = 0  # CODE cave no longer erased
         image[-2:] = crc16_usb(bytes(image[:-2])).to_bytes(2, 'little')
         with self.assertRaisesRegex(ValueError, 'cave'):
             synthetic.run_vl103_chain(bytes(image))

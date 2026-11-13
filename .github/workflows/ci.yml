@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install linters
+        run: python -m pip install ruff pyright
+      - name: ruff check
+        run: ruff check .
+      - name: ruff format
+        run: ruff format --check .
+      - name: pyright
+        run: pyright
+      - name: markdownlint
+        run: npx --yes markdownlint-cli2@0.18.1 "**/*.md"
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ['3.9', '3.13']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install SDCC (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y sdcc
+      - name: Install SDCC (macOS)
+        if: runner.os == 'macOS'
+        run: brew install sdcc
+      - name: Install package
+        run: python -m pip install .
+      - name: doctor (informational; distro SDCC may differ from 4.6.0)
+        run: switch2-hub-patcher doctor || true
+      - name: Unit tests (offline; real-dump tests skip)
+        run: python -m unittest discover -s tests -v
+      - name: CLI smoke test
+        run: |
+          switch2-hub-patcher --version
+          switch2-hub-patcher status || true
