@@ -1,17 +1,13 @@
-#!/usr/bin/env python3
 """OFFLINE VID-only diagnostic on the exact v3-15V image. Never flashes a device.
 
 Redirect ONLY the PD Discover Identity builder's two VID CODE reads. Do not edit
 USB/update metadata, product type, other identity VDOs, DP, power or responders.
 This tests a hypothesis, not a full official-dock identity or compatibility fix.
 """
-import argparse
 import hashlib
-import json
-from pathlib import Path
+
 from .vl103_crc import crc16_usb, stored_and_computed
 
-ASM = Path(__file__).resolve().parent / 'asm'
 BASE_SHA = '2f59a358e1cd847cbf6aa96a5ba28037cb9287d2d1bef18683ef886b15a79e60'
 CONSTANT = 0x7c00
 VID = bytes.fromhex('7e 05')

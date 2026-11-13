@@ -1,20 +1,13 @@
-#!/usr/bin/env python3
 """Build an OFFLINE 15V-only reservation experiment on the exact v2 candidate.
 
 No USB/device access or flashing. Reallocates budget, not measured hardware
 headroom: fixed15V EXACT3A inputs reserve3W, all other profiles stay stock.
 """
-import argparse
 import hashlib
-import json
-from pathlib import Path
-import shutil
-import subprocess
-import tempfile
 
+from . import hexfile
 from .vl103_crc import crc16_usb, stored_and_computed
 
-ASM = Path(__file__).resolve().parent / 'asm'
 BASE_SHA = 'f1c75dbdf48dd806c003b180fda88813d2256400e46e8e9f9619c0b0047015ee'
 HOOK = 0x339d
 OLD = bytes.fromhex('75 14 46')
@@ -27,43 +20,8 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def parse_hex(text):
-    memory = {}
-    ended = False
-    for line in text.splitlines():
-        if not line:
-            continue
-        if ended or not line.startswith(':'):
-            raise ValueError('invalid HEX ordering')
-        record = bytes.fromhex(line[1:])
-        if len(record) < 5 or len(record) != record[0] + 5 or sum(record) & 255:
-            raise ValueError('invalid HEX record')
-        n, address, kind = record[0], int.from_bytes(record[1:3], 'big'), record[3]
-        if kind == 1 and n == 0 and address == 0:
-            ended = True
-        elif kind == 0:
-            for offset, byte in enumerate(record[4:-1]):
-                at = address + offset
-                if not ENTRY <= at < END or at in memory:
-                    raise ValueError('power stub outside reserved cave or duplicate')
-                memory[at] = byte
-        else:
-            raise ValueError('unsupported HEX record')
-    if not ended or ENTRY not in memory:
-        raise ValueError('missing power entry or EOF')
-    return memory
-
-
 def assemble():
-    with tempfile.TemporaryDirectory(prefix='vl103-power15-') as directory:
-        directory = Path(directory)
-        shutil.copyfile(ASM / 'power_15v.asm', directory / 'power_15v.asm')
-        for command in (['sdas8051', '-los', 'power_15v.asm'], ['sdld', '-n', '-i', 'power_15v.rel']):
-            result = subprocess.run(command, cwd=directory, text=True, stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT, timeout=30)
-            if result.returncode:
-                raise RuntimeError('power stub build failed:\n' + result.stdout)
-        return parse_hex((directory / 'power_15v.ihx').read_text())
+    return hexfile.assemble('power_15v', ((ENTRY, END),), required=(ENTRY,))
 
 
 def build_candidate(base):
@@ -93,7 +51,7 @@ def build_candidate(base):
         'experiment': 'vl103-native-responder-v3-15v',
         'base_sha256': BASE_SHA,
         'output_sha256': sha(image),
-        'source_sha256': sha((ASM / 'power_15v.asm').read_bytes()),
+        'source_sha256': sha((hexfile.ASM / 'power_15v.asm').read_bytes()),
         'size_bytes': len(image),
         'crc16_usb': f'0x{stored:04X}',
         'power_hook': {'offset': HOOK, 'old': OLD.hex(), 'new': NEW.hex()},

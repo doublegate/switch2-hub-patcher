@@ -14,7 +14,7 @@ import sys
 IMAGE_SIZE = 0x8000
 
 
-def crc16_usb(data: bytes) -> int:
+def crc16_usb(data) -> int:
     # poly 0x8005 reflected (0xA001), init 0xFFFF, xorout 0xFFFF
     crc = 0xFFFF
     for b in data:
@@ -30,9 +30,10 @@ def stored_and_computed(img: bytes):
 
 def main(argv) -> int:
     if len(argv) < 3 or argv[1] not in ("check", "fix"):
-        print(__doc__.strip(), file=sys.stderr)
+        print((__doc__ or '').strip(), file=sys.stderr)
         return 2
-    img = open(argv[2], "rb").read()
+    with open(argv[2], "rb") as f:
+        img = f.read()
     if len(img) != IMAGE_SIZE:
         print(f"error: expected {IMAGE_SIZE:#x} bytes, got {len(img):#x}", file=sys.stderr)
         return 1
@@ -42,7 +43,8 @@ def main(argv) -> int:
         print(f"stored 0x{stored:04X}  computed 0x{computed:04X}  {'OK' if ok else 'MISMATCH'}")
         return 0 if ok else 1
     out = argv[3] if len(argv) > 3 else argv[2]
-    open(out, "wb").write(img[:-2] + computed.to_bytes(2, "little"))
+    with open(out, "wb") as f:
+        f.write(img[:-2] + computed.to_bytes(2, "little"))
     print(f"wrote {out}: checksum 0x{stored:04X} -> 0x{computed:04X}")
     return 0
 

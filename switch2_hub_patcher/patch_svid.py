@@ -1,14 +1,10 @@
-#!/usr/bin/env python3
 """Build an OFFLINE SVID-only VL103 experiment, never flash a device.
 
 Supports only the exact stock dump in this project. Advertises 057E alongside
 FF01; DOES NOT implement Nintendo mode entry or proprietary replies. NOT a
 Switch 2 compatibility fix. Hardware recovery has not been demonstrated.
 """
-import argparse
 import hashlib
-import json
-from pathlib import Path
 
 from .vl103_crc import IMAGE_SIZE, crc16_usb, stored_and_computed
 

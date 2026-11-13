@@ -1,22 +1,16 @@
-#!/usr/bin/env python3
 """Build a guarded EXPERIMENTAL 32KiB candidate. NEVER opens/flashes a device.
 
 Unlike the simulator overlay, CODE stays inside the real image and no new XDATA
 is allocated. This uses optimistic/native-style mode state, NOT the strict host
 lifecycle's delivery-confirmed commit. Read the manifest before any experiment.
 """
-import argparse
 import hashlib
-import json
-from pathlib import Path
-import shutil
-import subprocess
-import tempfile
 
-from .patch_svid import build_candidate as build_svid, STOCK_SHA256
+from . import hexfile
+from .patch_svid import STOCK_SHA256
+from .patch_svid import build_candidate as build_svid
 from .vl103_crc import crc16_usb, stored_and_computed
 
-ASM = Path(__file__).resolve().parent / 'asm'
 HOOKS = (
     (0x5d3f, bytes.fromhex('e5 2c 24 de'), bytes.fromhex('02 70 00 00'), 'source data router'),
     (0x591c, bytes.fromhex('e4 90 2a 29'), bytes.fromhex('02 7a 00 00'), 'common PD reset'),
@@ -28,46 +22,10 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def parse_hex(text):
-    memory = {}
-    ended = False
-    for line in text.splitlines():
-        if not line:
-            continue
-        if ended or not line.startswith(':'):
-            raise ValueError('bad Intel HEX ordering')
-        record = bytes.fromhex(line[1:])
-        if len(record) < 5 or len(record) != record[0] + 5 or sum(record) & 255:
-            raise ValueError('bad Intel HEX checksum/length')
-        count, address, kind = record[0], int.from_bytes(record[1:3], 'big'), record[3]
-        if kind == 1 and count == 0 and address == 0:
-            ended = True
-        elif kind == 0:
-            for offset, byte in enumerate(record[4:-1]):
-                at = address + offset
-                if not 0x7000 <= at < 0x7ffe or at in memory:
-                    raise ValueError('target overlay outside guarded cave or duplicate data')
-                memory[at] = byte
-        else:
-            raise ValueError('unsupported Intel HEX record')
-    if not ended or any(entry not in memory for entry in
-                        (0x7000, 0x7100, 0x7180, 0x7200, 0x7280, 0x7400,
-                         0x7500, 0x7580, 0x7600, 0x7a00, 0x7a10)):
-        raise ValueError('missing target entry or EOF')
-    return memory
-
-
 def assemble():
-    with tempfile.TemporaryDirectory(prefix='vl103-target-build-') as directory:
-        directory = Path(directory)
-        shutil.copyfile(ASM / 'target_responder.asm', directory / 'target_responder.asm')
-        for command in (['sdas8051', '-los', 'target_responder.asm'],
-                        ['sdld', '-n', '-i', 'target_responder.rel']):
-            result = subprocess.run(command, cwd=directory, text=True,
-                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
-            if result.returncode:
-                raise RuntimeError('target assembler/linker failure:\n' + result.stdout)
-        return parse_hex((directory / 'target_responder.ihx').read_text())
+    return hexfile.assemble('target_responder', ((0x7000, 0x7ffe),),
+                            required=(0x7000, 0x7100, 0x7180, 0x7200, 0x7280, 0x7400,
+                                      0x7500, 0x7580, 0x7600, 0x7a00, 0x7a10))
 
 
 def build_candidate(original):
@@ -101,7 +59,7 @@ def build_candidate(original):
         'size_bytes': len(image),
         'input_sha256': STOCK_SHA256,
         'output_sha256': sha(image),
-        'source_sha256': sha((ASM / 'target_responder.asm').read_bytes()),
+        'source_sha256': sha((hexfile.ASM / 'target_responder.asm').read_bytes()),
         'crc16_usb': f'0x{stored:04X}',
         'overlay_bytes': len(overlay),
         'overlay_first': min(overlay),

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "switch2-hub-patcher"
-version = "1.0.0"
+version = "1.1.0"
 description = "Offline firmware patcher: Nintendo Switch 2 docking on a VL103/RTD2142 USB-C hub"
 readme = "README.md"
 license = { text = "MIT" }
@@ -17,4 +17,14 @@ switch2-hub-patcher = "switch2_hub_patcher.cli:main"
 packages = ["switch2_hub_patcher"]
 
 [tool.setuptools.package-data]
-switch2_hub_patcher = ["asm/*.asm"]
+switch2_hub_patcher = ["asm/*.asm", "data/*.quirk"]
+
+[tool.pyright]
+include = ["switch2_hub_patcher", "tests"]
+extraPaths = ["tests"]
+pythonVersion = "3.9"
+typeCheckingMode = "standard"
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100

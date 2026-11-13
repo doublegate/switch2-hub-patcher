@@ -1,0 +1,16 @@
+# Local fwupd quirk: bind VIA's generic reference IDs (VL817 hub with a VL103
+# PD controller on the shared SPI flash) to the vli plugin.
+# Install:  sudo cp via-vl817-vl103.quirk /var/lib/fwupd/quirks.d/
+#           sudo systemctl restart fwupd
+# Remove the file to undo.
+[USB\VID_2109&PID_0817]
+Plugin = vli
+GType = FuVliUsbhubDevice
+Flags = usb3,has-shared-spi-pd
+CounterpartGuid = USB\VID_2109&PID_2817
+
+[USB\VID_2109&PID_2817]
+Plugin = vli
+GType = FuVliUsbhubDevice
+Flags = usb2
+ParentGuid = USB\VID_2109&PID_0817

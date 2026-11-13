@@ -1,19 +1,13 @@
-#!/usr/bin/env python3
 """OFFLINE coherent PD3 identity-reply experiment. No device access/flashing.
 
 Returns the observed official PD3 reply, not USB identity or hardware capability
 certification. Legacy PD2 uses the unchanged v4 path. Other behavior stays v4.
 """
-import argparse
 import hashlib
-import json
-from pathlib import Path
-import shutil
-import subprocess
-import tempfile
+
+from . import hexfile
 from .vl103_crc import crc16_usb, stored_and_computed
 
-ASM = Path(__file__).resolve().parent / 'asm'
 BASE_SHA = 'c5cff89182e83862b342e63a0adfcecab3213ce141f6b383b8e608f8a9721a2c'
 HOOK = 0x251f
 OLD = bytes.fromhex('7f 05 12 58 76')
@@ -26,45 +20,11 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def parse_hex(text):
-    memory = {}
-    ended = False
-    for line in text.splitlines():
-        if not line:
-            continue
-        if ended or not line.startswith(':'):
-            raise ValueError('invalid HEX order')
-        r = bytes.fromhex(line[1:])
-        if len(r) < 5 or len(r) != r[0]+5 or sum(r) & 255:
-            raise ValueError('invalid HEX record')
-        n, at, kind = r[0], int.from_bytes(r[1:3], 'big'), r[3]
-        if kind == 1 and n == 0 and at == 0:
-            ended = True
-        elif kind == 0:
-            for i, byte in enumerate(r[4:-1]):
-                address = at+i
-                if address in memory or not any(lo <= address < hi for lo, hi in REGIONS):
-                    raise ValueError('overlay outside guarded identity regions')
-                memory[address] = byte
-        else:
-            raise ValueError('unsupported HEX record')
-    if not ended or 0x7c40 not in memory:
-        raise ValueError('missing entry or EOF')
+def assemble():
+    memory = hexfile.assemble('identity_pd3', REGIONS, required=(0x7c40,))
     if bytes(memory.get(a, 255) for a in range(0x7d00, 0x7d14)) != BODY:
         raise ValueError('unexpected captured identity body')
     return memory
-
-
-def assemble():
-    with tempfile.TemporaryDirectory(prefix='vl103-id3-') as d:
-        d = Path(d)
-        shutil.copyfile(ASM / 'identity_pd3.asm', d/'identity_pd3.asm')
-        for cmd in (['sdas8051','-los','identity_pd3.asm'], ['sdld','-n','-i','identity_pd3.rel']):
-            r = subprocess.run(cmd, cwd=d, text=True, stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT, timeout=30)
-            if r.returncode:
-                raise RuntimeError(r.stdout)
-        return parse_hex((d/'identity_pd3.ihx').read_text())
 
 
 def build_candidate(base):
@@ -94,7 +54,7 @@ def build_candidate(base):
     return image, {
         'experiment':'vl103-native-responder-v5-pd3-identity',
         'base_sha256':BASE_SHA, 'output_sha256':sha(image), 'size_bytes':len(image),
-        'source_sha256':sha((ASM / 'identity_pd3.asm').read_bytes()),
+        'source_sha256':sha((hexfile.ASM / 'identity_pd3.asm').read_bytes()),
         'crc16_usb':f'0x{stored:04X}', 'hook':{'offset':HOOK,'old':OLD.hex(),'new':NEW.hex()},
         'overlay_bytes':len(overlay), 'pd3_identity_ndo':6,
         'pd3_identity_vdos':['FF00A041','5460057E','00000000','20620000','65000031','00000000'],

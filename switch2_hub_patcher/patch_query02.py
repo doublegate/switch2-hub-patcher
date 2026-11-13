@@ -1,19 +1,13 @@
-#!/usr/bin/env python3
 """Build an OFFLINE UNVERIFIED query02-only diagnostic from exact v5.
 
 Advertises captured official0003006E, not the actual RTD2142 firmware version.
 No device access/flashing, GPIO, converter, DP, identity or power changes.
 """
-import argparse
 import hashlib
-import json
-from pathlib import Path
-import shutil
-import subprocess
-import tempfile
+
+from . import hexfile
 from .vl103_crc import crc16_usb, stored_and_computed
 
-ASM = Path(__file__).resolve().parent / 'asm'
 BASE_SHA = '6ab038bd2dd0bf008e2ffe73b5d237c46cfee17be8ae701f78096aeea9da3beb'
 HOOKS = (
     (0x7280, bytes.fromhex('e9 60 09'), bytes.fromhex('02 7e 00')),
@@ -26,43 +20,8 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def parse_hex(text):
-    memory = {}
-    ended = False
-    for line in text.splitlines():
-        if not line:
-            continue
-        if ended or not line.startswith(':'):
-            raise ValueError('bad HEX ordering')
-        record = bytes.fromhex(line[1:])
-        if len(record) < 5 or len(record) != record[0]+5 or sum(record)&255:
-            raise ValueError('bad HEX length/checksum')
-        n, address, kind = record[0],int.from_bytes(record[1:3],'big'),record[3]
-        if kind == 1 and n == 0 and address == 0:
-            ended = True
-        elif kind == 0:
-            for offset,byte in enumerate(record[4:-1]):
-                at = address+offset
-                if at in memory or not any(lo <= at < hi for lo,hi in REGIONS):
-                    raise ValueError('overlay outside query02 regions or duplicate data')
-                memory[at] = byte
-        else:
-            raise ValueError('unsupported HEX record')
-    if not ended or not all(at in memory for at in (0x7e00,0x7e40)):
-        raise ValueError('missing query02 entry or EOF')
-    return memory
-
-
 def assemble():
-    with tempfile.TemporaryDirectory(prefix='vl103-query02-') as directory:
-        directory = Path(directory)
-        shutil.copyfile(ASM / 'query02.asm',directory/'query02.asm')
-        for command in (['sdas8051','-los','query02.asm'],['sdld','-n','-i','query02.rel']):
-            result = subprocess.run(command,cwd=directory,text=True,stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT,timeout=30)
-            if result.returncode:
-                raise RuntimeError(result.stdout)
-        return parse_hex((directory/'query02.ihx').read_text())
+    return hexfile.assemble('query02', REGIONS, required=(0x7e00, 0x7e40))
 
 
 def build_candidate(base):
@@ -97,7 +56,7 @@ def build_candidate(base):
     return image,{
         'experiment':'vl103-native-responder-v6-query02',
         'base_sha256':BASE_SHA,'output_sha256':sha(image),'size_bytes':len(image),
-        'source_sha256':sha((ASM / 'query02.asm').read_bytes()),
+        'source_sha256':sha((hexfile.ASM / 'query02.asm').read_bytes()),
         'crc16_usb':f'0x{stored:04X}','overlay_bytes':len(overlay),
         'hooks':[{'offset':at,'old':old.hex(),'new':new.hex()} for at,old,new in HOOKS],
         'request_vdos':['057E0001','00000002'],
