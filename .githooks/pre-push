@@ -1,0 +1,10 @@
+#!/bin/sh
+# Block pushes of any commit tree that contains absolute home paths.
+# stdin: <local ref> <local sha> <remote ref> <remote sha>, one line per ref.
+set -eu
+check="$(git rev-parse --show-toplevel)/.githooks/check-home-paths"
+zero=0000000000000000000000000000000000000000
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+    [ "$local_sha" = "$zero" ] && continue        # branch deletion
+    "$check" "$local_sha"
+done

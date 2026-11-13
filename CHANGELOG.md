@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `.githooks/` pre-commit and pre-push guards (`git config core.hooksPath .githooks`)
+  that block absolute home paths before they leave the machine; CI now calls the same
+  `.githooks/check-home-paths` script.
+
 ## [1.1.0] - 2026-11-13
 
 The patch outputs are byte-for-byte unchanged. The hardware-tested images (VL103

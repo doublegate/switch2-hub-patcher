@@ -32,7 +32,14 @@ are about not bricking anyone's hub.
 brew install sdcc          # or: apt install sdcc / dnf install sdcc
 python3 -m pip install -e . ruff pyright
 switch2-hub-patcher doctor # expect: matches the SDCC 4.6.0 reference output
+git config core.hooksPath .githooks   # pre-commit/pre-push guards (see below)
 ```
+
+The hooks in `.githooks/` block commits and pushes that contain absolute home paths
+(`/Users/<name>`, `/home/<name>/`), which would leak a username into the public
+repository. CI runs the same check (`.githooks/check-home-paths`). A typical source is
+re-running Master-Claude (`mc-sync`/`mc-setup`), which writes `AGENTS.md` imports with
+`$HOME`; keep them as `@~/.claude/master-core/...`.
 
 ## Before opening a pull request
 

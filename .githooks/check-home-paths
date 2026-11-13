@@ -1,0 +1,24 @@
+#!/bin/sh
+# Fail if tracked content contains an absolute home path (/Users/<name>, /home/<name>/).
+# Such paths leak a username into the public repository; use ~/ or repo-relative
+# paths instead. Typical source: re-running Master-Claude (mc-sync / mc-setup), which
+# writes AGENTS.md imports as "$HOME/.claude/master-core/...".
+#
+# Usage: check-home-paths            check the index (staged content; pre-commit)
+#        check-home-paths <commit>   check that commit's tree (pre-push, CI)
+set -eu
+
+pattern='/Users/[A-Za-z]|/home/[a-z][a-z0-9_-]*/'
+
+if [ "$#" -gt 0 ]; then
+    hits=$(git grep -n -I -E "$pattern" "$1" -- ':!*.patch' ':!.githooks/check-home-paths' || true)
+else
+    hits=$(git grep -n -I -E --cached "$pattern" -- ':!*.patch' ':!.githooks/check-home-paths' || true)
+fi
+
+if [ -n "$hits" ]; then
+    printf '%s\n' "$hits" >&2
+    printf 'error: absolute home paths found (see above); replace them with ~/ or relative paths.\n' >&2
+    printf 'For AGENTS.md: sed -i.bak "s|^@/Users/[^/]*/|@~/|" AGENTS.md\n' >&2
+    exit 1
+fi
