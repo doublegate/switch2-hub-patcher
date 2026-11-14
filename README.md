@@ -160,6 +160,7 @@ give your user access to the USB device and `/dev/i2c-*`. Use `--bus N` (from
   on Linux and keep the SOIC-8 clip ready. On macOS, `rtd-flash` still refuses to
   write unless a full read of the chip, made in that same run, matches the base
   image's hash.
+- Step by step: [RTD2142 on macOS](docs/macos-rtd2142.md).
 
 ### Manual path (Linux, fwupdtool + flashrom)
 
