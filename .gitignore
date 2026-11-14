@@ -11,7 +11,18 @@
 DB.bin
 DPCDDB.bin
 IPDB.bin
+ReadAll.txt
 fields*.txt
+# Labels decoded from them (research/ghidra/db_to_tsv.py); research/rtd2142_symbols.tsv is ours
+db-registers.tsv
+registers.tsv
+
+# Ghidra projects and exports over firmware (research/ghidra/); vendor-derived
+*.gpr
+*.rep/
+*.gzf
+*.lock
+*.lock~
 
 # SDCC by-products when assembling in the tree
 *.rel

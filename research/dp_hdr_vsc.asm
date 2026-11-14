@@ -9,19 +9,26 @@
 ;   MSA MISC1 bit6 = 1 (colorimetry is carried in the VSC SDP)
 ;   SEC_FUNCTION_CTRL bit2 = 1 (transmit the VSC SDP), latched at vblank.
 ;
-; Register addresses are the RTD2172's DP 1.2 TX0 (pages 4D/4E) from the public
-; Realtek tool database; `switch2-hub-patcher survey <rtd2142 dump>` shows whether
-; the RTD2142 firmware drives TX0 (4Dxx) or TX1 (BBxx/BCxx). Change TX/SEC below.
+; Register addresses are the RTD2172's DP 1.2 TX1 (pages BB/BC) from the public
+; Realtek tool database. The stock RTD2142 dump (17eea728...d802) drives TX1 only:
+; `survey` finds 31 TX1 references and none to TX0 (4Dxx/4Exx).
 ;
-; Open items before this can become a patch (see research/DP_HDR_AND_VRR.md):
-;  - hook points: where the firmware programs MSA MISC0/1 and the SDP enables
-;    for the DP output, and where HDR metadata on/off is detected for that port;
-;  - the "HDR active" condition for the DP port (the HDMI patch reads E362 bit1 /
-;    DD9F for logical port 1; the DP port's flags are not known yet);
-;  - only apply when the downstream sink sets DPCD 0x2210 bit3 (VSC SDP
-;    colorimetry supported); otherwise leave MSA colorimetry alone;
-;  - VSC SDP header revision (HB2=05h, HB3=13h): the TX header register was not
-;    found in the RTD2172 database; it may be generated in hardware.
+; What the stock dump shows (research/DP_HDR_AND_VRR.md, "Findings from the stock
+; dump"), which changes the approach:
+;  - the firmware already has a VSC colorimetry path for TX1: dptx1_program_msa
+;    (bank 2 AFC4) and dptx1_update_colorimetry (bank 2 9E7D) take it only when
+;    the TX colorimetry index DF2F[6:3] is 0x0D (extended) and DF25 bit 6 is set.
+;    The path builds the VSC payload (bank 1 91F2) and header (bank 1 9FCD:
+;    HB2/HB3 = 05h/13h), sets SEC_FUNCTION_CTRL bit 7 (not bit 2) and MISC1 bit 6;
+;  - the VSC payload goes through the SDP payload port (BC8B/BC8C, slot BC8D), not
+;    the SEC_PSR_DB registers below, which the firmware never addresses directly;
+;  - the HDR static-metadata SDP (type 87h) is already forwarded on this port.
+; So the likely patch is a hook at that colorimetry gate that also takes the path
+; (with BT.2020 as the extended colorimetry) while PQ/HLG metadata is present,
+; rather than this standalone routine. It is kept as a reference for the fields.
+;
+; Still open: the DP port's "HDR active" condition, and confirming DF25 bit 6 is
+; the downstream DPCD 0x2210 bit 3 (VSC SDP colorimetry supported) flag.
 ;
 ; Interface: C=1 apply BT.2020 VSC colorimetry, C=0 restore SDR signalling.
 ; Uses A, R6, R7, DPTR. No RAM.
@@ -30,8 +37,8 @@
 .area DPHDR (ABS,CODE)
 .org 0x0000
 
-TX       = 0x4d00            ; DP TX MAC CTRL0 page (TX1 would be 0xbb00)
-SEC      = 0x4e00            ; DP TX MAC CTRL1 page (TX1 would be 0xbc00)
+TX       = 0xbb00            ; DP TX1 MAC CTRL0 page (the port this firmware drives)
+SEC      = 0xbc00            ; DP TX1 MAC CTRL1 page
 MSA_CTRL = TX  + 0xb4        ; bit7 msa_db
 MSA_MISC0 = TX + 0xb5        ; [7:5] bpc [3] CEA range [2:1] component format
 MSA_MISC1 = TX + 0xb6        ; bit6 colorimetry in VSC SDP

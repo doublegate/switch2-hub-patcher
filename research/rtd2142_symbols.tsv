@@ -1,0 +1,111 @@
+# RTD2142 stock firmware (17eea728...d802): names for code and XDATA, for Ghidra.
+# Apply with research/ghidra/RenameSymbols.java; rtd2142_map.REGISTERS is added on top.
+# Columns: bank (0-7, or * for every bank), space (CODE or EXTMEM), address (hex), name, note.
+# A trailing "_q" in a name marks a role inferred from one use site and not yet confirmed.
+#
+# --- banking (identical in every bank) ---
+*	CODE	0cb8	bank_call0	MOV DPTR,#target; LJMP here: call target in bank 0
+*	CODE	0cca	bank_call1	same, bank 1
+*	CODE	0cdc	bank_call2	same, bank 2
+*	CODE	0cee	bank_call3	same, bank 3
+*	CODE	0d00	bank_call4	same, bank 4
+*	CODE	0d12	bank_call5	same, bank 5
+*	CODE	0d24	bank_call6	same, bank 6
+*	CODE	0d36	bank_call7	same, bank 7
+*	CODE	3200	bank_select0	writes 0 to XDATA FFFF (bank register), RET into target
+*	CODE	3210	bank_select1
+*	CODE	3220	bank_select2
+*	CODE	3230	bank_select3
+*	CODE	3240	bank_select4
+*	CODE	3250	bank_select5
+*	CODE	3260	bank_select6
+*	CODE	3270	bank_select7
+*	CODE	2533	c51_ccase	Keil C51 ?C?CCASE: switch on A, table of (hi,lo,value) after the LCALL
+*	EXTMEM	ffff	BANK_SELECT	code bank register
+#
+# --- 0x35 debug interface (I2C slave over DP AUX; code shared by every bank) ---
+0	CODE	e674	dbg_i2c_slave_init	FF23 = 0x6A (7-bit 0x35), enables EX1
+0	CODE	9b74	dbg_i2c_slave_isr	EX1 handler: cmd byte from FF24, data bytes from FF25 into E28C..
+0	CODE	9c61	dbg_i2c_slave_clear_status
+0	CODE	6636	dbg_i2c_slave_reset
+0	CODE	67fc	dbg_i2c_slave_cfg
+*	CODE	2972	dbg_service	main-loop entry; 0x55 enters debug mode
+*	CODE	29fa	dbg_execute
+*	CODE	2c4d	dbg_dispatch	switch on E28B, see research notes for the table
+*	CODE	2d59	dbg_cmd_default	low nibble 1/2: addr hi; 3/6: write data; 5: autoinc; 0: indirect
+*	CODE	309a	dbg_cmd_block_read	0xBB: checksummed block read (<= 24 bytes)
+*	CODE	32fb	dbg_cmd_block_write	0xBA: checksummed block write (<= 24 bytes)
+*	CODE	2fec	dbg_get_addr	R6:R7 = E28D:E28C
+*	CODE	2ff9	dbg_cmd_done
+*	EXTMEM	e253	dbg_rx_count
+*	EXTMEM	e268	dbg_filter0	set by 0x55 data byte 0
+*	EXTMEM	e269	dbg_filter1	set by 0x55 data byte 1
+*	EXTMEM	e28b	dbg_cmd	first byte of the I2C write (sub-address)
+*	EXTMEM	e28c	dbg_data0	first data byte (address low for 0x3A/0x3B)
+*	EXTMEM	e28d	dbg_addr_hi
+*	EXTMEM	e28e	dbg_wdata	byte written by 0x3B; block length for 0xBA/0xBB
+*	EXTMEM	e28f	dbg_autoinc
+*	EXTMEM	e290	dbg_csum
+*	EXTMEM	ff23	I2C_SLAVE_ADDR	debug slave address (0x6A)
+*	EXTMEM	ff24	I2C_SLAVE_SUB	received sub-address (command)
+*	EXTMEM	ff25	I2C_SLAVE_RXDATA
+*	EXTMEM	ff26	I2C_SLAVE_TXDATA	byte returned by an I2C read from 0x35
+*	EXTMEM	ff27	I2C_SLAVE_STATUS	bit1 start/sub received, bit2 data in, bit4 stop
+*	EXTMEM	ff29	I2C_SLAVE_CTRL_q
+*	EXTMEM	ff2a	I2C_SLAVE_CTRL2_q
+#
+# --- DP TX1 (the DP output port; TX0 is unused by this firmware) ---
+2	CODE	afc4	dptx1_program_msa	timing words BBB7..BBC6, then MISC0/1, then the VSC colorimetry decision
+2	CODE	9e7d	dptx1_update_colorimetry	re-evaluates MISC and the VSC colorimetry slot on a format change
+2	CODE	977e	dptx1_program_msa_misc	MISC0 bpc/format/colorimetry and MISC1 from DF2D/DF2E/DF2F
+2	CODE	9cd8	dptx1_update_sdp_enables	BC00 bits 5 and 3 from the forwarded HDR/other SDPs
+2	CODE	5739	dptx1_vsc_slot_on	BC00 bit 7 = 1
+2	CODE	5794	dptx1_misc1_vsc_colorimetry	BBB6 bit 6 = 1 (colorimetry carried in the VSC SDP)
+2	CODE	595b	dptx1_sec_latch_vblank	BC02 |= 3
+2	CODE	56b2	tx_get_colorimetry	DF2F[6:3]; 0x0D gates the VSC colorimetry path
+2	CODE	564e	tx_get_caps_df25_q	DF25[7:6]; bit 6 also gates the VSC colorimetry path
+2	CODE	5aa0	tx_get_pixel_format	DF2D[2:0]
+2	CODE	5658	tx_get_bpc_code	DF2D[7:3]
+2	CODE	56fa	dptx1_misc0_keep_low	BBB5 & 0x1F
+2	CODE	5aa7	dptx1_misc1_keep_low	BBB6 & 0x7F
+2	CODE	5483	dptx1_misc1_clr7_misc0_mask	BBB6 &= 0x7F, A = BBB5 & 0xE1
+2	CODE	149e	call_b1_dptx_vsc_payload	-> bank 1 91F2
+2	CODE	1468	call_b1_dptx_sdp_header	-> bank 1 9FCD (latch, type)
+2	CODE	1462	call_b1_dptx_sdp_payload	-> bank 1 BC9D (latch, type)
+2	CODE	14a4	call_b1_fc4d	-> bank 1 FC4D
+1	CODE	91f2	dptx_vsc_payload	VSC DB16..18 from DF2D (pixel encoding) and DF2E (extended colorimetry)
+1	CODE	9fcd	dptx_sdp_header	type 7: VSC (HB2/HB3 05/13 when colorimetry is 0x0D, else 01/01); type 0x0D: HDR metadata 0x87
+1	CODE	bc9d	dptx_sdp_payload	payload through BC8B/BC8C, slot select BC8D
+1	CODE	b3b0	dptx_sec_dbuf_keep	BC02 & 0xFC
+*	EXTMEM	df25	tx_caps_q
+*	EXTMEM	df2d	tx_format	[2:0] pixel format, [7:3] bpc code
+*	EXTMEM	df2e	tx_ext_colorimetry	[4:0] extended colorimetry index
+*	EXTMEM	df2f	tx_colorimetry	[6:3] colorimetry index (0x0D = extended)
+*	EXTMEM	df60	tx_sdp_flags_q	bit0/bit1 drive BC00 bit 5
+*	EXTMEM	bc73	TX1_SDP_HB0
+*	EXTMEM	bc74	TX1_SDP_HB1
+*	EXTMEM	bc75	TX1_SDP_HB2
+*	EXTMEM	bc76	TX1_SDP_HB3
+*	EXTMEM	bc7b	TX1_SDP_HDR_SEL	[3:0] header slot / type
+*	EXTMEM	bc8b	TX1_SDP_PAYLOAD_ADR
+*	EXTMEM	bc8c	TX1_SDP_PAYLOAD_DAT
+*	EXTMEM	bc8d	TX1_SDP_PAYLOAD_SEL	[2:0] payload slot
+#
+# --- DP RX stream 1 (VRR groundwork; roles not yet confirmed) ---
+6	CODE	6596	dprx1_dpf_setup_q	writes DPF_CTRL_0 (B130: only disp_en is ever set) and DP_RSV1 (B191)
+6	CODE	9eda	dprx1_program_dpf_timing	disp_en off + dpf_reset, B141-B150 timing and B133-B137 frame-sync offsets from the MSA, then B130 &= 0x4F (full-last-line mode)
+6	CODE	844b	dprx1_dpf_tracking_q
+6	CODE	a445	dprx1_dpf_a445_q
+6	CODE	e264	dprx1_progressive_q	B191.interlace_half_line_en = 0; B157 interlace config = (B157 & 0x0E) | 0x21
+6	CODE	58a3	dprx1_rsv1_bit0_set
+6	CODE	5a18	dprx1_rsv1_bit0_clear
+6	CODE	59fd	dprx1_get_rsv0	B190 & 0x87 (drr_mode in bit 0)
+6	CODE	569b	set_bit7_at_dptr	@DPTR |= 0x80 (callers pass B130: disp_en, or B126)
+#
+# --- DPCD access port (B7C1-B7C3 address H/M/L, B7C4 data) ---
+0	CODE	8bc3	dpcd_set_addr_at_dptr	@DPTR.. = R7, R5, R3 (callers pass B7C1)
+0	CODE	8bbb	dpcd_ctrl_clear7_set_addr	B7C0 bit 7 = 0, then dpcd_set_addr_at_dptr at B7C1
+0	CODE	8baf	dpcd_b7d0_bit1_set_q	B7D0 bit 1 = 1; EA = 1
+0	CODE	8bcc	dpcd_b7d0_bit1_clear_q	B7D0 bit 1 = 0; EA = 1
+3	CODE	8901	dpcd_set_addr	B7C1..B7C3 = R7, R5, R3
+5	CODE	fbd8	dpcd_set_addr	B7C1..B7C3 = R7, R5, R3
