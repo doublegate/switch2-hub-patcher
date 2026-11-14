@@ -25,7 +25,7 @@
 - **Stack:** Python ≥ 3.9, standard library only (setuptools packaging), plus 8051 assembly in `switch2_hub_patcher/asm/` assembled at run time by SDCC (`sdas8051`, `sdld`).
 - **Build / run:** `pip install .`; commands: `vl103`/`rtd2142` (patch, `--manifest`), `identify`, `doctor`, `status`, `guide` (interactive), `vl103-devices|dump|flash` (fwupd vli, private quirk state dir), `rtd-probe|dump|flash` (Realtek ISP over Linux /dev/i2c-N or macOS IOAVService), `find-aux [--probe]`, `survey`.
 - **Test:** `python3 -m unittest discover -s tests`. Synthetic-image tests (`tests/synthetic.py`, no vendor code) run every builder offline when SDCC is present, with outputs pinned for SDCC 4.6.0. The real-dump tests skip unless `S2HUB_VL103_DUMP` / `S2HUB_RTD2142_DUMP` point at stock dumps.
-- **Lint / format gate:** `ruff check .`, `ruff format --check .` (single quotes, 100 cols, rules in `pyproject.toml`), `pyright` (py3.9, `[tool.pyright]`), `npx markdownlint-cli2 "**/*.md"`. CI (`.github/workflows/ci.yml`) runs these plus the tests on Ubuntu/macOS × Python 3.9/3.13.
+- **Lint / format gate:** `ruff check .`, `ruff format --check .` (single quotes, 100 cols, rules in `pyproject.toml`), `pyright` (py3.9, `[tool.pyright]`), `npx markdownlint-cli2@0.24.0 "**/*.md"` (the CI pin; older versions lack MD060), `bash scripts/agy-review-selftest.sh`. CI (`.github/workflows/ci.yml`) runs these plus the tests on Ubuntu/macOS × Python 3.9/3.13.
 
 ### Architecture — load-bearing facts
 
