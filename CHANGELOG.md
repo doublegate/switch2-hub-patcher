@@ -21,7 +21,9 @@ All notable changes to this project are documented here. The format follows
   runner labelled `agy`, with a project style guide in `.github/agy-review.md` (hash
   locks, write guards, no firmware in the repository). CI's `lint` job runs
   `scripts/agy-review-selftest.sh`. The vendored
-  `.github/AGY-REVIEWER.md` is excluded from markdownlint.
+  `.github/AGY-REVIEWER.md` is excluded from markdownlint. With the reviewer on `main`,
+  the workflow's first-install bootstrap steps (a PR-head checkout that could only ever
+  run once) are removed.
 - `research/DP_HDR_AND_VRR.md`: what the official dock does differently for VRR (an
   HDMI 2.1-class RTD2175N converter that already passes VRR from other sources), why the
   fix is RTD2142 firmware rather than VL103, the missing live-register tool (the 0x35
