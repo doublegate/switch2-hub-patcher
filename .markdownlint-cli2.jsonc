@@ -1,4 +1,4 @@
 {
   "config": {"MD013": false, "MD033": false, "MD024": {"siblings_only": true}, "MD041": false},
-  "ignores": ["AGENTS.md", "CLAUDE.md", "GEMINI.md"]
+  "ignores": ["AGENTS.md", "CLAUDE.md", "GEMINI.md", ".github/AGY-REVIEWER.md"]
 }
