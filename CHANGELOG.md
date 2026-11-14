@@ -55,7 +55,7 @@ All notable changes to this project are documented here. The format follows
   tools: Ghidra projects and exports (`*.gpr`, `*.rep/`, `*.gzf`, lock files), the
   decoded register label tables and the RTD2172 DB's `ReadAll.txt`.
 - RTD2142 **HDR-to-SDR fix candidate** (`rtd2142 --sdr-fix`, `patch_rtd2142_sdr_fix.py`,
-  v4 output `390ed39d…37cd`, not yet tested on a hub). Root cause, read on a live chip:
+  v6 output `3a56a3aa…fd62`, not yet tested on a hub). Root cause, read on a live chip:
   in HDR the source carries colorimetry in the VSC SDP (MSA MISC1 bit 6 set) and the
   stock firmware stores a BT.2020 code in E3E6. Only that path ever writes the code, so
   after a switch to SDR (MISC1 bit 6 clear, MISC0 = BT.709; DP 1.4a Table 2-96) the HDMI
@@ -68,19 +68,31 @@ All notable changes to this project are documented here. The format follows
     firmware rebuilds the output.
   - Bank 2 `E952` → `FF00`: also clears the stale HDMI colour depth (5B07) on the
     8-bit path.
-  - Bank 2 `C432` `60 77` → `80 77` (v4): the HDMI 2.0 scrambling-status check
-    (`hdmi_scdc_scramble_check`) always takes its success path. On this TV the sink's
-    Scrambling_Status bit is unreliable. The stock firmware then rewrote TMDS_Config
-    with video running, and after 6 misses re-entered setup with scrambling off, which
-    gives no picture at 594 MHz (live: 5B08 `D1`, E0AD `06`, E0D7 `30`). A hot plug still
-    redoes the full SCDC setup. Byte patches are checked against their original bytes
-    like hooks.
+  - HDR (DRM) packet (v5): bank 2 `F31F` → `hdmi_drm_enable_guard` (`FF20`) sends the
+    packet only while the source metadata's EOTF (DD9F) is non-zero. macOS keeps sending
+    all-zero metadata in SDR, which the stock hub relays forever; on HDMI the Mac stops
+    it after 2 s (CTA-861-H). Byte `CDB1` `FC` → `DC`: an output restart no longer
+    enables the packet with the previous mode's metadata (PQ after HDR → SDR) before it
+    is rebuilt.
+  - HDMI 2.0 scrambling (v5): the first Scrambling_Status check comes after 250 ms
+    instead of 100 ms (`E279` `64` → `FA`). The check and its TMDS_Config re-send
+    recovery stay, but at 6 misses the hub no longer re-enters setup with scrambling off
+    (`C76E` `B4 06` → `80 0A`). That fall-back caused the stuck "no signal" at 594 MHz
+    (live: 5B08 `D1`, E0AD `06`, E0D7 `30`). v4 instead forced the check to pass, which
+    removed the recovery; the TV did worse and SDR still cycled.
+  - General Control Packet (v6): bank 2 `FA18` `BF 08` → `80 0A`. `hdmi_gcp_update` used to
+    switch the GCP off for 8-bit output, so after a re-sync (TV power cycle or input
+    switch) an SDR picture never got Clear_AVMUTE. In a recovery test on v5, SDR failed
+    to come back 2 times out of 3, while HDR (GCP on) always did. Now every mode gets
+    the GCP with Clear_AVMUTE, as the Raspberry Pi HDMI driver also does ("Always enable
+    GCP with AVMUTE cleared").
   - Hash-locked like the other patches: original hook bytes, erased overlay space and
-    the exact footprint (71 bytes) are checked.
-  - Offline tests: a synthetic image, the real dump, and simulated flashes (stock →
-    v4 is 6 sectors; v3 → v4 is 1).
+    the exact footprint (100 bytes) are checked.
+  - Offline tests: a synthetic image, the real dump, and simulated flashes (v4 → v5
+    is 3 sectors; v5 → v6 is 1).
   - Candidates v1 (`f191da0f…8e92`; colour depth only), v2 (`d249fa20…a695`) and v3
-    (`f5de8f43…2b8b`; SDR much smoother, scrambling still escalating) were flashed. v2 fixed the end state of every switch, but about half the switches still
+    (`f5de8f43…2b8b`; SDR much smoother, scrambling still escalating) v4
+    (`390ed39d…37cd`; check forced to pass) and v5 (`cc224105…0ca0`) were flashed. v2 fixed the end state of every switch, but about half the switches still
     failed in an automated soak, because the AVI could be built before the stale code
     was cleared. Both stay known as superseded, so `rtd-flash` can move a hub off them.
 - `rtd-clear-bits ADDR MASK --volatile-ram-write`: clears allow-listed bits (`E362`

@@ -30,7 +30,9 @@ both use the flat layout in the current directory, as before.
 | `candidates/rtd2142-sdrfix-v1.bin` (+ `.json`) | RTD2142 SDR-fix v1, superseded | `f191da0f7201fe26c9f9924b11a7f486ce18faa305c145b806cb0f251e518e92` |
 | `candidates/rtd2142-sdrfix-v2.bin` (+ `.json`) | RTD2142 SDR-fix v2, superseded | `d249fa204f68e8963fe8246578319e1be544fe9a8fe656ecdda5237a8a54a695` |
 | `candidates/rtd2142-sdrfix-v3.bin` (+ `.json`) | RTD2142 SDR-fix v3, superseded | `f5de8f43f8c44338822bec2ec31b67bda326f5e985f867410caf6f099cf22b8b` |
-| `candidates/rtd2142-sdrfix-v4.bin` (+ `.json`) | RTD2142 SDR-fix v4, not yet tested on a hub | `390ed39dc2bb2880c0251d63d6889856438c8ec775123c203f77b720740737cd` |
+| `candidates/rtd2142-sdrfix-v4.bin` (+ `.json`) | RTD2142 SDR-fix v4, superseded | `390ed39dc2bb2880c0251d63d6889856438c8ec775123c203f77b720740737cd` |
+| `candidates/rtd2142-sdrfix-v5.bin` (+ `.json`) | RTD2142 SDR-fix v5, superseded | `cc2241056e8cd1311234a232403f35fdfd12ceff456d9ca5ac514fd987920ca0` |
+| `candidates/rtd2142-sdrfix-v6.bin` (+ `.json`) | RTD2142 SDR-fix v6, not yet tested on a hub | `3a56a3aa183f7249743c7d9b7a19b89ac528053bc1deb0882126178c21cbfd62` |
 
 Check any file with `switch2-hub-patcher identify firmware/*/*.bin`. A file that
 reports "unknown" is a different firmware version or a corrupt dump; don't flash it.

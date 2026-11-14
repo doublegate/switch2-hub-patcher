@@ -35,7 +35,7 @@
 
 ### Gotchas / institutional knowledge
 
-- Supported images are exactly the hashes in the README table (four, plus the RTD2142 SDR-fix candidate v4 `390ed39d…37cd`, labelled as not yet tested on a hub until it is, and the superseded v1 `f191da0f…8e92`, v2 `d249fa20…a695` and v3 `f5de8f43…2b8b`, known only so `rtd-flash` can move a hub off them). Never loosen the hash checks to accept other dumps.
+- Supported images are exactly the hashes in the README table (four, plus the RTD2142 SDR-fix candidate v6 `3a56a3aa…fd62`, labelled as not yet tested on a hub until it is, and the superseded v1 `f191da0f…8e92`, v2 `d249fa20…a695`, v3 `f5de8f43…2b8b`, v4 `390ed39d…37cd` and v5 `cc224105…0ca0`, known only so `rtd-flash` can move a hub off them). Never loosen the hash checks to accept other dumps.
 - The RTD2142 BT.2020 patch (`f242d130…42f1`) was validated upstream in a simulator only. On one hub it gave correct HDR from a Mac but no HDMI picture from a Switch 2, while the same Switch worked on SDR-fix v1 (no BT.2020 change). Don't describe it as hardware-tested.
 - `OVERLAY_DIGESTS_SDCC_4_6_0` in `pipeline.py`: the first six entries are confirmed (on 2026-11-14 real stock VL103 and RTD2142 dumps passed the pipeline with SDCC 4.6.0 and produced `6b5b0eff…888e` and `f242d130…42f1`); `rtd2142_sdr_fix` is recorded from the real stock dump, for a candidate image.
 - macOS IOAVService I2C reads work on the real hub (2026-11-14: `rtd-dump` about 9 min per read at 32-byte chunks); the first macOS `rtd-flash` (stock -> patched, about 18 min) succeeded the same day. `rtd-flash` writes only after a full same-session read matches the base hash.

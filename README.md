@@ -74,7 +74,7 @@ images and refuses anything else:
 | --- | --- | --- | --- |
 | VL103 PD firmware 10.48.3.22 | 32 KiB | `3763c9f3ed64316dc2faeb94dfe14dfb18da4fb1589298740a27979f3737cff3` | `6b5b0eff3e72be89b1b226739face9194f2ec30812b8c1fda5346cae90f4888e` |
 | RTD2142 flash | 2 MiB | `17eea7286255892698066e0b46085dcb5a42855f9797f067041c2ee45104d802` | `f242d130c7a0947f75bc673eb6100160c3cdb8e1d2f5cb9d1a5dca5332a742f1` |
-| RTD2142 flash, SDR-fix candidate v4 (`--sdr-fix`, not yet tested on a hub) | 2 MiB | same | `390ed39dc2bb2880c0251d63d6889856438c8ec775123c203f77b720740737cd` |
+| RTD2142 flash, SDR-fix candidate v6 (`--sdr-fix`, not yet tested on a hub) | 2 MiB | same | `3a56a3aa183f7249743c7d9b7a19b89ac528053bc1deb0882126178c21cbfd62` |
 
 If your dump has a different hash, your hub has different firmware and these patches
 don't apply. Please don't force them.

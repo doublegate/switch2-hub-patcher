@@ -120,7 +120,7 @@
 0	CODE	2dbb	dbg_set_autoinc	default handler, low nibble 5: E28F = data
 #
 # --- DP RX HDR metadata capture (bank 1) and per-port status ---
-1	CODE	b7c2	rx_hdr_sdp_capture_q	per port: copy the received HDR metadata SDP into a cache, update the E35D+5*port status
+1	CODE	b7bf	rx_port_hdr_reset	DP-side re-setup of one port: reset its HDR status (E35D+5*port), clear its HDR metadata cache (port 1: DD9D..), pulse the RX infoframe resets (B23C/B43C via dfae)
 *	CODE	434b	rx_hdr_status_at_dptr	A = @DPTR, then rx_hdr_status_ptr
 *	CODE	434c	rx_hdr_status_ptr	DPTR = E35D + 5*(A & 3); A = @DPTR
 *	EXTMEM	e35d	rx_hdr_status_p0	port 0 HDR status
@@ -243,3 +243,9 @@
 2	CODE	fd0b	hdmi_state_set_q	sets the HDMI TX state (argument = next state)
 2	CODE	ea8b	hdmi_output_restart_q	stops SCDC events (33/34/35), resets E0D7 bit4/E0AD; HDMI mode with scrambling off (4ad2) or DVI; then setup
 2	CODE	4ad2	hdmi_mode_unscrambled	*param = (*param & 9F) | 40: 5B08 HDMI mode, scramble_en off
+2	CODE	cdb1	hdmi_pkt_enable_all_mask	ORL A,#FC (stock) in hdmi_pkt_enable_all; SDR-fix v5 makes it #DC (HDR packet left off at a restart)
+2	CODE	e279	hdmi_scdc_first_check_ms	MOV R7,#64 (100 ms) in hdmi_scdc_scramble_start; SDR-fix v5: FA (250 ms)
+2	CODE	c76e	hdmi_scdc_give_up_test	CJNE A,#6 in hdmi_state_running_q; SDR-fix v5 jumps past the unscrambled re-setup
+2	CODE	ff20	hdmi_drm_enable_guard	SDR-fix v5 overlay (not stock): HDR packet on only while the source EOTF (DD9F & 7) is non-zero
+1	CODE	dfae	rx_infoframe_reset_pulse	R5 = which (0..3), R7 = port: pulses a dp_info_*_rst bit in B23C/B43C..
+2	CODE	fa18	hdmi_gcp_8bit_test	CJNE R7,#8 in hdmi_gcp_update (stock: 8-bit -> GCP off, AVMUTE never cleared); SDR-fix v6: SJMP FA24, GCP with Clear_AVMUTE in every mode

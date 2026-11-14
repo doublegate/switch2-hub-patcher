@@ -525,6 +525,38 @@ in E10B/E10C. This TV matches none (E10B `00`). E10B bit 3 makes `hdmi_scdc_scra
   away and back without replugging the hub. If that fails, the alternative (v4b) keeps
   the re-checks and rewrites but never falls back to unscrambled output.
 
+**v4 on the hub and candidate v5.** A v4 soak (18 switches) had zero scrambling
+retries (E0AD at most 1, scrambling never off), but the user saw it run worse than v3,
+and SDR still cycled at times. Forcing the check to pass removed the stock recovery
+(re-sending TMDS_Config), which this TV evidently needs sometimes. v5 drops v4's byte
+and instead:
+
+- keeps the recovery but removes the fall-back to unscrambled output (`C76E`);
+- checks Scrambling_Status first after 250 ms (`E279`, the user's suggestion);
+- fixes the HDR metadata packet, the remaining hub-vs-direct difference in SDR.
+  `hdmi_drm_enable_guard` (`FF20`, hooked at `F31F` in `hdmi_drm_update`) sends it
+  only while the source EOTF is non-zero, and `hdmi_pkt_enable_all` no longer turns it on
+  with stale metadata at a restart (`CDB1`).
+
+To test: soak v5 while recording 5B6B (bit 5 should be 0 in SDR, 1 in HDR) and the
+scrambling state; then the TV power-cycle and input-switch recovery test.
+
+**v5 on the hub and candidate v6.** A v5 soak (18 switches) ran mostly clean, the
+user reported, with a couple of no-signals and a few SDR loops. The HDR packet was off
+in steady SDR (5B6B `DC`) and on in HDR (`FC`). Scrambling never dropped, and the
+recovery ran on 4 switches. Brief "SDR + EOTF 2 + packet on" samples (about 0.3 s) were
+SDR → HDR switches: the HDR metadata arrives just before MISC1 bit 6. They are not
+stale PQ in SDR. A recovery test with no HDR toggling: TV power cycle and input switch.
+In HDR the picture always came back. In SDR it failed 2 of 3 times, although the hub
+restarted cleanly every time (5B08 `40` → `F1` within 0.3 s, E0D9 `01`). The difference
+is the General Control Packet. `hdmi_gcp_update` (`FA09`) enables it with Clear_AVMUTE
+for 10/12-bit (`hdmi_gcp_enable`, `FC19`) but turns it off for 8-bit, so after a re-sync
+an SDR sink never sees Clear_AVMUTE. Some displays need it before they show a picture:
+see the vc4 driver fix "Always enable GCP with AVMUTE cleared"
+(<https://lists.freedesktop.org/archives/dri-devel/2023-January/389772.html>). v6 makes
+the 8-bit branch take the GCP-on path (`FA18` → `SJMP FA24`). The GCP colour depth is
+0 ("not indicated") in 8-bit, because `5B07` is cleared there since v1.
+
 **The BT.2020 patch (`rtd2142_hdr_avi`) and this bug.** Its AVI rebuild hooks fire only
 when the HDR packet's enable bit changes, but an output restart enables every packet
 at once (`hdmi_pkt_enable_all`, `CDAA`), and the AVI is built before the new HDR
