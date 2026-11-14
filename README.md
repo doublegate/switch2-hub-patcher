@@ -79,7 +79,7 @@ video on many third-party docks, and 23.0.0 added docked VRR. Results recorded s
 
 | System version | Hub state | Result |
 | --- | --- | --- |
-| 23.0.1 | VL103 patched (`6b5b0eff…888e`), RTD2142 stock | Flashed and read back on Linux; docking test pending |
+| 23.0.1 | VL103 patched (`6b5b0eff…888e`), RTD2142 stock | Works: enters TV mode; docking delay roughly halved (about 1.5 s, judged by eye); HDMI picture good, HDR still somewhat washed out as expected with the RTD2142 stock. Tested with VRR off, no Dock Update, no USB devices on the hub |
 
 Before you accept a console update, check here, and keep your stock dumps so you can
 roll the hub back.
