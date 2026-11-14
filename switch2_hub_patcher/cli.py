@@ -16,6 +16,7 @@ from .pipeline import (
     OVERLAY_DIGESTS_SDCC_4_6_0,
     RTD2142_SDR_FIX_LABEL,
     RTD2142_SDR_FIX_STEPS,
+    RTD2142_SDR_FIX_V1,
     RTD2142_STEPS,
     RTD2142_STOCK,
     VL103_STEPS,
@@ -294,6 +295,7 @@ def cmd_rtd_flash(args):
         RTD2142_STOCK: 'RTD2142 stock',
         RTD2142_STEPS[-1][2]: 'RTD2142 patched',
         RTD2142_SDR_FIX_STEPS[-1][2]: RTD2142_SDR_FIX_LABEL,
+        RTD2142_SDR_FIX_V1[0]: RTD2142_SDR_FIX_V1[1],
     }
     if platform.system() == 'Darwin' and args.bus is None:
         print(

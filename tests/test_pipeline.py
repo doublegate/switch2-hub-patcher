@@ -40,7 +40,7 @@ SYNTHETIC_VL103 = (
     'f4068d18380030034a0f84702011468a6abb4aa53da97e9289796c0bd09241f2',
     '1e7ae24aa2ce36d25bb243851ec9721da769514bcac175974eba5ea976860278',
 )
-SYNTHETIC_RTD2142_SDR_FIX = 'a19b9ab5d01bd28f55340842c04003559d4632bd354cf32ef5b1eb9375b08407'
+SYNTHETIC_RTD2142_SDR_FIX = '060604d7d3937e9127b35c911b6dfda8e313b952985b3091d0dcdf0d6fc722a3'
 SYNTHETIC_RTD2142 = 'fa03c9a336b3f9280154d41465402cd185ffaae2e13bb27a4c4219e7c10955f9'
 
 
@@ -117,6 +117,8 @@ class OfflineTests(unittest.TestCase):
         sdr_fix = pipeline.RTD2142_SDR_FIX_STEPS[-1][2]
         with mock.patch.object(pipeline, 'sha256', return_value=sdr_fix):
             self.assertIn('not yet tested on a hub', pipeline.identify(b''))
+        with mock.patch.object(pipeline, 'sha256', return_value=pipeline.RTD2142_SDR_FIX_V1[0]):
+            self.assertIn('superseded', pipeline.identify(b''))
         self.assertIn('VL103-sized', pipeline.identify(b'\0' * 0x8000))
         self.assertIn('RTD2142-sized', pipeline.identify(b'\0' * 0x200000))
         self.assertEqual(pipeline.identify(b'abc'), 'unknown')
@@ -298,7 +300,7 @@ class AssemblerTests(unittest.TestCase):
     def test_synthetic_rtd2142_sdr_fix(self):
         image, manifest = synthetic.run_rtd2142_sdr_fix(synthetic.rtd2142_sdr_fix_image())
         self.assertEqual(manifest['banks_changed'], [2, 5])
-        self.assertEqual(manifest['changed_byte_count'], 36)  # two 3-byte hooks + 30 bytes
+        self.assertEqual(manifest['changed_byte_count'], 48)  # two 3-byte hooks + 42 bytes
         self.assertFalse(manifest['hardware_validated'])
         hooks = {(h['bank'], h['address']): h['new'] for h in manifest['hooks']}
         self.assertEqual(hooks, {(5, 'c476'): '02fd80', (2, 'e952'): '02ff00'})
@@ -307,10 +309,11 @@ class AssemblerTests(unittest.TestCase):
 
     def test_sdr_fix_overlays_rejoin_the_stock_code(self):
         memory, symbols = patch_rtd2142_sdr_fix.assemble()
-        bank5 = bytes(memory[(5, a)] for a in range(0xFD80, 0xFD8F))
+        bank5 = bytes(memory[(5, a)] for a in range(0xFD80, 0xFD9B))
         bank2 = bytes(memory[(2, a)] for a in range(0xFF00, 0xFF0F))
-        # mov dptr,#B403 / movx / jb acc.6 / jnb 2E / clr c / ret / ljmp C479
-        self.assertEqual(bank5.hex(), '90b403e020e605302e02c32202c479')
+        # MISC1 bit 6 set -> stock; E3E6[4:0] == 0 -> stock (DPTR = B403 again);
+        # else E3E6 &= E0, C = 0, ret. Stock continues at C479.
+        self.assertEqual(bank5.hex(), '90b403e020e61190e3e6e0541f6006e054e0f0c32290b40302c479')
         # 5B06 &= FC, inc dptr, 5B07 &= 0F, ljmp E959
         self.assertEqual(bank2.hex(), '905b06e054fcf0a3e0540ff002e959')
         self.assertEqual(symbols['rx2_fmt_'], (5, 0xFD80))

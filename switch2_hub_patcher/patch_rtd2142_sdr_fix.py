@@ -1,9 +1,9 @@
 """CANDIDATE: fix the RTD2142 HDR -> SDR picture-format bugs (stock firmware).
 
 After an HDR -> SDR switch the stock firmware keeps describing the picture with the HDR
-format: the DP side's format check never notices that the source moved its colorimetry
-from the VSC SDP back to MSA MISC0, so the HDMI AVI InfoFrame keeps saying BT.2020; and
-the HDMI side leaves the 12-bit colour depth in 5B07. Both were read on a live chip
+format: the VSC-derived colorimetry code (E3E6[4:0], BT.2020) is never cleared once the
+source moves its colorimetry back to MSA MISC0, so the HDMI AVI InfoFrame keeps saying
+BT.2020; and the HDMI side leaves the 12-bit colour depth in 5B07. Both were read on a live chip
 while the TV kept re-detecting (research/DP_HDR_AND_VRR.md).
 
 Builds from the hash-guarded stock dump; changes banks 2 and 5 only. Never touches
@@ -21,7 +21,7 @@ PARTS = (
     (
         'rtd2142_rx2_colorimetry',
         5,
-        (0xFD80, 0xFDC0),
+        (0xFD80, 0xFDC0),  # 27 bytes used
         ((0xC476, bytes.fromhex('90 b4 03'), 'rx2_fmt_check'),),
     ),
     (
@@ -86,7 +86,7 @@ def build(base):
     if not set(changed) <= allowed:
         raise ValueError('unexpected footprint')
     manifest = {
-        'experiment': 'rtd2142-sdr-fix-v1',
+        'experiment': 'rtd2142-sdr-fix-v2',
         'base_sha256': BASE_SHA,
         'output_sha256': sha(image),
         'source_sha256': {
@@ -97,10 +97,10 @@ def build(base):
         'banks_changed': sorted({i // BANK_SIZE for i in changed}),
         'hooks': hooks,
         'symbols': {s: f'{bank}:{at:04x}' for s, (bank, at) in symbols.items()},
-        'behaviour': 'DP RX stream 2: when MSA MISC1 bit 6 is clear but the cached format came '
-        'from the VSC SDP (flag 0x2E), the format check reports a change so the firmware '
-        're-captures from MISC0 (AVI colorimetry follows); HDMI TX: the 8-bit branch of '
-        'hdmi_set_deep_color also clears 5B07[7:4] (dp_color_depth).',
+        'behaviour': 'DP RX stream 2: when MSA MISC1 bit 6 is clear and a VSC-derived '
+        'colorimetry code is left in E3E6[4:0], the format check clears it (the power-up '
+        'value) and reports a change so the firmware rebuilds the output from MISC0; HDMI '
+        'TX: the 8-bit branch of hdmi_set_deep_color also clears 5B07[7:4] (dp_color_depth).',
         'unchanged': [
             'HDR packet forwarding, AVI builder, DP transmitter',
             'streams 1, 3 and 4, DPCD, EDID, startup, all other banks',
