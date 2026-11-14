@@ -196,3 +196,50 @@
 2	CODE	b385	hdmi_edid_byte_store_q	E09D = processed EDID byte (1A9E), counts CD19
 *	EXTMEM	e09d	hdmi_edid_value_q	derived from the sink's EDID; D0 after a re-read (an effect of re-detects, not a cause)
 *	EXTMEM	e09f	hdmi_edid_value_saved_q	compared with E09D by hdmi_edid_changed_q
+#
+# --- HDMI 2.0 SCDC scrambling check (bank 2) ---
+2	CODE	c3ea	hdmi_scdc_scramble_check	scramble_en set: read sink SCDC 0x21 (3 tries); bit0 set -> E0D9=1; else E0D9=2, rewrite TMDS_Config (SCDC 0x20, 3 tries), re-check in 300 ms (event 0x33) and E0AD++ (10 s if E0D7 bit4)
+2	CODE	4130	scdc_tmds_config_args	writes the TMDS_Config bytes; R3=0x20 (SCDC offset), R5=1, R7=0xA8 (SCDC DDC address)
+2	CODE	4137	scdc_args_a8	R5=1, R7=0xA8 (callers set R3 = SCDC offset)
+2	CODE	0968	ddc_write_q	DDC write (CD16..), C on success
+2	CODE	1132	call_ddc_read	-> bank 0 8E42
+2	CODE	0e98	timer_schedule_q	R7:R6 ms, R5 event id
+2	CODE	dc9a	hdmi_scdc_recheck_q	second Scrambler_Status check path (event 0x34, 10 s)
+*	EXTMEM	e0ad	hdmi_scdc_retry_count	failed scrambler-status checks since the output start (reset at 43E3/EAB0; 5 and 6 trigger other paths)
+*	EXTMEM	e0d9	hdmi_scdc_status_state	1 = sink reports scrambling, 2 = retrying
+*	EXTMEM	e0d7	hdmi_scdc_flags_q	bit4: 10 s re-check instead of 300 ms
+5	CODE	de88	rx2_get_format_field	R7 = field 0..11 -> R6:R7; jump table at DE95 (field 8 entry at DEAD -> DEE9)
+5	CODE	dee9	rx2_field_colorimetry_code	field 8: A = E3E6 & 0x1F (read by the HDMI side into E0E7[4:0])
+5	CODE	ded7	rx2_field_e3e6_bits65	field 7: E3E6[6:5]
+5	CODE	dee1	rx2_field_msa_colorimetry_lo	field 9 (stock): E3E7 & 3
+5	CODE	df00	rx2_field_return	R7 = A, R6 = 0, ret
+5	CODE	fd9b	rx2_field8	SDR-fix v3 overlay (not stock): field 8 = 0 while MISC1 bit 6 is clear
+#
+# --- HDMI general control packet (GCP) and deep-colour packer (bank 2) ---
+2	CODE	fa09	hdmi_gcp_update	8-bit input: 5B09 &= F8 (GCP off, no AVMUTE bits); else hdmi_gcp_enable (clear-AVMUTE, then GCP on)
+2	CODE	fc19	hdmi_gcp_enable	5B09 |= 01 (clear AVMUTE), wait, then |= 05 (GCP on + clear AVMUTE); the firmware never sets AVMUTE (bit 1)
+2	CODE	4951	hdmi_gcp_reg_masked	DPTR = 5B09; A = 5B09 & F8
+2	CODE	4152	port_table_c58a_ptr	DPTR = C58A + 17 * R7 (per-port table)
+2	CODE	fc02	port_flags_set_q	per-port table: |= 08, then |= 02 (port 0)
+*	EXTMEM	5b06	HDMI_CONTROL_6	dp_fp[7:5] dp_last_phase_en.4 dp_phase_default_en.3 dp_phase_default.2 dp_enable.1 (deep-colour packer) dp_vch_mode.0
+#
+# --- HDMI sink identification and per-display quirks (bank 2) ---
+2	CODE	7232	hdmi_sink_quirks_identify	after the sink EDID is read: stage quirk-table entries (3C87..3D36) into CDxx, compare, derive a sink ID (CD78/CD79), set quirk flag bits in E10B/E10C, scan CTA blocks for the HF-VSDB (07 80 02 1C) into E10D/E10E
+2	CODE	f791	hdmi_sink_quirks_caller_q	calls hdmi_sink_quirks_identify
+*	EXTMEM	e10b	hdmi_sink_quirk_flags	bit0 EDID matched, bit1 ID 02, bit2 IDs 03/04/0F/10/11/14/15/1C/1F, bit3 IDs 1A/1B/1D, bit5 ID 16, bit6 ID 17, bit7 ID 18; read by the SCDC restart path (E267: 500 vs 100 ms)
+*	EXTMEM	e10c	hdmi_sink_quirk_flags2	bit0 ID 19
+*	EXTMEM	e10d	hdmi_sink_has_hf_vsdb_q	1 when a CTA HDMI Forum VSDB was found
+*	EXTMEM	e10e	hdmi_sink_hf_caps_q	[3:0] HF-VSDB capability bits
+*	EXTMEM	cd78	hdmi_sink_id_q	sink ID from the quirk match
+*	EXTMEM	e09e	hdmi_sink_edid_mismatch_q	0 when the EDID matched the staged header bytes
+2	CODE	e211	hdmi_scdc_scramble_start	write sink TMDS_Config (SCDC 0x20, 3 tries); on success wait 500 ms if E10B bit3 (slow-sink quirk) else 100 ms, then event 0x33 (hdmi_scdc_scramble_check)
+2	CODE	c3d2	hdmi_scdc_scramble_check_entry	entry of the check (C3EA is inside it); E10B bit5 defers it while scramble_en is off; bit4 changes the status re-reads
+2	CODE	106c	timer_schedule_ms_q	R7 low, R6 high ms, R5 event id
+2	CODE	410f	hdmi_sink_quirk_bit3	A = (E10B >> 3) & 0x1F (bit0 = E10B bit3, the 500 ms slow-sink wait)
+2	CODE	c432	hdmi_scdc_status_decision	JZ C4AB (stock 60 77): sink Scrambling_Status bit -> success; SDR-fix v4 makes it SJMP (80 77), always success
+2	CODE	c4ab	hdmi_scdc_status_ok	E0D9 = 1; re-check in 10 s (event 0x33)
+2	CODE	c6d0	hdmi_state_running_q	HDMI state machine, state 4: at E0AD = 6 with E0D9 = 2 sets E0D7 bit4 and re-enters setup (fd0b(3)): the stuck "no signal"
+2	CODE	c7bb	hdmi_state_store_and_resetup_q	*param = value; fd0b(3)
+2	CODE	fd0b	hdmi_state_set_q	sets the HDMI TX state (argument = next state)
+2	CODE	ea8b	hdmi_output_restart_q	stops SCDC events (33/34/35), resets E0D7 bit4/E0AD; HDMI mode with scrambling off (4ad2) or DVI; then setup
+2	CODE	4ad2	hdmi_mode_unscrambled	*param = (*param & 9F) | 40: 5B08 HDMI mode, scramble_en off

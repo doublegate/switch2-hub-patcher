@@ -237,8 +237,24 @@ stable; and keep the DP TX timing in step (its MSA comes from the same
    macOS, or a SOIC-8 clip. Run `rtd-probe`, then `rtd-dump`. *Done 2026-11-14 on
    macOS: stock dump `17eea728…d802`.*
 2. **Land the shipped RTD2142 HDR step first.** It is the same chip and write path.
-   *The offline half is done: the stock dump patches to `f242d130…42f1` with SDCC
-   4.6.0, which confirms the `rtd2142_hdr_avi` digest. Flashing it is next.*
+   *Flashed 2026-11-14: HDR from a Mac looked right, but a Switch 2 gave no picture,
+   so the hub went back to stock. Live reads then found the stock HDR-to-SDR bugs
+   (section 5). Revised order:*
+   1. *SDR-fix v2 (`d249fa20…a695`): flash it and verify (Mac HDR/SDR switching with
+      a recording, Switch 2 SDR/HDR from a cold plug-in).*
+   2. *Re-verify the BT.2020 patch against what is known now (done on paper: right
+      bytes and checksum; it self-corrects after an output restart on the next
+      metadata change; no overlap with v2). Required tidy-up: when the built AVI
+      already says extended colorimetry (C = 3 with EC = 5, 6 or 7; EC = 7 is the
+      version-4 "additional colorimetry" form with PB14), leave it as built instead of
+      forcing EC = 6, so the patch only adds BT.2020 where the source gave none; test
+      plain, already-BT.2020 and version-4 EC = 7 AVIs (bytes and checksum),
+      then chain it on top of v2 (stock -> v2 -> v2 + BT.2020, a new recorded hash),
+      verify offline (Ghidra, synthetic, footprint, simulated flash), flash, and test
+      HDR colours on the Mac and the Switch 2. The earlier no-picture result was
+      probably several factors together, not this patch alone: the first v1 connection
+      also needed several tries.*
+   3. *Then VRR (steps 3 to 7 below), on top of whichever image proves stable.*
 3. **`survey` the stock dump:** find who writes `B130`/`B19A`/`B2FC` (and the ST2–4
    copies) and the DPCD 0x0007 bit 6 that the hub advertises upstream. *Done for
    direct references: nothing addresses `B19A` (`vrr_mode`) or `B2FC`
@@ -248,12 +264,13 @@ stable; and keep the DP TX timing in step (its MSA comes from the same
 4. **Recover the 0x35 debug interface** from the dump and add a read-only
    `rtd-peek` command (test it against `tests/fake_rtd.py`); add writes only once
    reads are trusted. *Protocol decoded (section 3); read-only `rtd-peek` written and
-   tested offline, not yet run on the hub.*
+   tested offline, then confirmed on the hub, as is a single-byte write limited to an
+   allowlist (`rtd-clear-bits`).*
 5. **Find the timing-stable state** in the main loop (where it writes
    `deonly_full_mode` or leaves frame-sync). That is the hook for "VRR on". *Partly
-   done: stream 1 runs full-last-line and the mode is chosen at the end of
-   `dprx1_program_dpf_timing` (bank 6 `A0BC`); see "Findings from the stock dump
-   (VRR)". Still open: which stream is live, and where DPCD `0x0007` is set.*
+   done: stream 2 is live (2026-11-14) and runs full-last-line; the mode is chosen in
+   `dprx2_program_dpf_timing` (bank 5 `94CC`), the copy of stream 1's `A0BC`. Still
+   open: where DPCD `0x0007` is set.*
 6. **Poke, then build.** Set `deonly_mode|vrr_mode` and `vsc_for_vrr_en` live, only
    while the received stream carries Adaptive-Sync SDPs. Test DP-port VRR first,
    using *Welcome Tour* 1.1.0 with VRR on and a monitor with a refresh-rate OSD.
@@ -350,6 +367,17 @@ $G proj rtd -process bank2.bin -noanalysis -scriptPath research/ghidra \
   become clear, so every later decompile reads with them.
 - `DecompSites.java` decompiles the functions containing the given addresses and
   lists their callers; `Listing.java` prints raw disassembly for address ranges.
+- Whole firmware: `auto_names.py stubs` lists the 752 cross-bank entry points (from the
+  common-area `MOV DPTR,#target; LJMP bank_callN` stubs). `FunctionReport.java` creates
+  functions there and reports every function's size, callers, callees and XDATA reads and
+  writes. `auto_names.py names` names default (`FUN_*`) functions by subsystem: the
+  register page they touch (from the RTD2172 register names), else by majority over
+  callers and callees (6 rounds, across banks). The result is `<sub>_XXXX`,
+  `<sub>_ctl_XXXX`, `<sub>_ram_XXXX`, `call_bN_XXXX` or `fn_XXXX`. `DecompileAll.java`
+  writes every function. On the stock image: 11,257 functions, all decompiled; 1,174
+  named from hardware access, 6,931 by propagation, 1,307 left as `fn_`. Confirmed names
+  from `rtd2142_symbols.tsv` are applied after the auto names, so they always win. Keep
+  the outputs in `firmware/analysis/` (gitignored, vendor-derived).
 - Keep bank images and Ghidra projects outside the repository: they contain vendor
   code. The scripts and the symbol map contain addresses and names only.
 
@@ -427,6 +455,75 @@ packet; displays label "BT.2020 + SDR gamma" as HLG:
 Not yet run on a hub. To test: flash it (from v1 or stock), switch the Mac HDR → SDR
 several times (expect one brief re-sync, then E3E6 / E0E7 `60`/`80` and a stable SDR
 picture), and test the Switch 2 with HDR on and off.
+
+**Candidate v2 on the hub, automated soak (2026-11-14).** macOS HDR can be switched
+from a script through the private SkyLight calls behind System Settings
+(`SLSDisplaySetHDRModeEnabled(display, enabled, 0, 0)`; `SLSDisplayIsHDRModeEnabled`),
+so a soak flips HDR every 20 s while the debug interface records the hub:
+
+| Path | Switches | Clean | Failures |
+| --- | --- | --- | --- |
+| Mac → TV directly (HDMI) | 18 | 18, all under 1 s | none |
+| Mac → hub (v2) → TV | 18 | 9 | 4 SDR re-detect loops, 5 HDR "no signal" (3 recovered after 2–3 s) |
+
+- v2 does what it was built for on every switch: SDR always ends with E3E6/E0E7
+  `60`/`80` and `5B07` `00`, HDR with `6E`/`8E` and `60`.
+- The HDMI 2.0 scrambling check (`hdmi_scdc_scramble_check`, bank 2 `C3EA`) retried
+  heavily in the first two minutes (E0AD up to 6, E0D7 bit 4: 10 s re-checks), but
+  it does not track the failures: switches 3 and 5 were good while it retried, and
+  failures 10 and 13–17 happened with E0D9 = 1 (scrambling locked) throughout.
+- Every hub-side register sampled (colour, depth, scrambling, packet enables, FIFO
+  `5B02`, EDID `E09D`) ends identical for good and bad switches, and each switch is a
+  single 1.5–2 s output restart. Over DP the Mac changes the pixel format on every
+  toggle (4:2:2 12-bit ↔ 4:4:4 8-bit), so the hub always restarts its HDMI output;
+  directly, the switch takes under a second. The remaining failures are inside the
+  restart sequence, faster than 3 samples per second shows. Next: a fast capture of
+  the restart registers (`5B08`, `5B6B`, `B330`, `E0D9`, `5A0x`) at about 15–20 Hz,
+  good vs failing restarts.
+
+**Fast capture and candidate v3.** A second soak sampled the restart registers
+(`5B08`, `B330`, `5B6B`, `E0D9`, `5A04`) at about 6 Hz. The TV was good on 12 of 18
+switches; there were 3 SDR loops and 3 HDR "no signal" (2.5, 2.5 and 7 s). The good and
+bad restarts look the same at that rate. In the 7 s case the hub had scrambling
+locked and everything enabled after about 2 s.
+
+The remaining SDR loops fit a race. The HDMI side reads the colorimetry code
+(format field 8, `rx2_get_format_field` `DE88`, case `DEE9` = E3E6 & 1F) and builds
+the AVI during its own restart, which can be before v2's polled check clears the
+stale code. v3 (`f5de8f43…2b8b`) redirects the field-8 entry of the jump table (`DEAD`)
+to `rx2_field8` (`FD9B`), which returns 0 while MISC1 bit 6 is clear, whatever E3E6
+holds. It keeps v2's `C476` hook to rebuild an AVI already built during the transition,
+and the `5B07` fix.
+
+The HDR "no signal" delays are not addressed. If they remain, check the TV's per-input
+HDMI mode and port first: other TVs fail HDR this way, though here direct HDMI on the same
+port was clean. Then look at the restart's TMDS/scrambling sequence.
+
+**Per-display quirks and the scrambling check (v4).** A raw-image scan found a
+per-display quirk table in bank 2 (`3C87`–`3D36`: EDID monitor-name descriptors such as
+"LEN Y27gq-25", "XB273K", "H277HU", "QD980 HDMI", and EDID fragments).
+`hdmi_sink_quirks_identify` (`7232`) matches the sink's EDID against it and sets flag bits
+in E10B/E10C. This TV matches none (E10B `00`). E10B bit 3 makes `hdmi_scdc_scramble_start`
+(`E211`) wait 500 ms instead of 100 ms after writing TMDS_Config, before
+`hdmi_scdc_scramble_check` reads the sink's Scrambling_Status (SCDC 0x21).
+
+- Soak A, v3 with E10B `00` (18 switches): 7 switches had status-check retries. The
+  user saw the TV run much smoother than on v2 (2 SDR loops and 1 no-signal seen).
+- Soak B, v3 with E10B bit 3 set through `rtd-set-bits` (a RAM write; a replug clears
+  it). After 6 switches the TV stayed at "no signal": 5B08 `D1` (scramble_en off),
+  E0D9 `02`, E0AD `06`, E0D7 `30`. The hub had failed the check four times in about 2 s.
+  `hdmi_state_running_q` (`C6D0`) then re-entered setup at E0AD = 6 with E0D7 bit 4 (a
+  10 s re-check), and the restart sets HDMI mode with scrambling off
+  (`hdmi_mode_unscrambled`, `4AD2`). At 594 MHz that means no picture. The first soak's
+  stuck no-signal (12:33:51) has the same signature. One run only, but the TV not
+  reporting the bit even with 500 ms waits suggests an unreliable sink status rather
+  than timing. The Linux SCDC helper also notes displays that refuse the bit.
+- v4 changes one byte: `C432` JZ → SJMP, so the check always takes `hdmi_scdc_status_ok`.
+  The trade-off: no in-place recovery if the TV loses scrambling without a hot plug. A
+  TV power cycle, input switch or cable glitch normally raises HPD, which reruns the
+  full SCDC setup. To verify: soak v4, then power-cycle the TV and switch its input
+  away and back without replugging the hub. If that fails, the alternative (v4b) keeps
+  the re-checks and rewrites but never falls back to unscrambled output.
 
 **The BT.2020 patch (`rtd2142_hdr_avi`) and this bug.** Its AVI rebuild hooks fire only
 when the HDR packet's enable bit changes, but an output restart enables every packet

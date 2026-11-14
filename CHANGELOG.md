@@ -55,27 +55,54 @@ All notable changes to this project are documented here. The format follows
   tools: Ghidra projects and exports (`*.gpr`, `*.rep/`, `*.gzf`, lock files), the
   decoded register label tables and the RTD2172 DB's `ReadAll.txt`.
 - RTD2142 **HDR-to-SDR fix candidate** (`rtd2142 --sdr-fix`, `patch_rtd2142_sdr_fix.py`,
-  v2 output `d249fa20…a695`, not yet tested on a hub). Root cause, read on a live chip:
+  v4 output `390ed39d…37cd`, not yet tested on a hub). Root cause, read on a live chip:
   in HDR the source carries colorimetry in the VSC SDP (MSA MISC1 bit 6 set) and the
   stock firmware stores a BT.2020 code in E3E6. Only that path ever writes the code, so
   after a switch to SDR (MISC1 bit 6 clear, MISC0 = BT.709; DP 1.4a Table 2-96) the HDMI
   AVI InfoFrame keeps saying BT.2020 over SDR video until the next power-up, and the TV
   keeps re-detecting.
-  - Bank 5 `C476` → `FD80`: with MISC1 bit 6 clear, clear a leftover code and report a
-    format change, so the firmware rebuilds the output.
-  - Bank 2 `E952` → `FF00`: also clear the stale HDMI colour depth (5B07) on the 8-bit
-    path.
+  - Bank 5 jump-table entry `DEAD` (format field 8, the code the HDMI side reads) →
+    `FD9B`: returns 0 while MISC1 bit 6 is clear, so no ordering inside an output
+    restart can yield BT.2020 over SDR.
+  - Bank 5 `C476` → `FD80`: clears a leftover code and reports a format change, so the
+    firmware rebuilds the output.
+  - Bank 2 `E952` → `FF00`: also clears the stale HDMI colour depth (5B07) on the
+    8-bit path.
+  - Bank 2 `C432` `60 77` → `80 77` (v4): the HDMI 2.0 scrambling-status check
+    (`hdmi_scdc_scramble_check`) always takes its success path. On this TV the sink's
+    Scrambling_Status bit is unreliable. The stock firmware then rewrote TMDS_Config
+    with video running, and after 6 misses re-entered setup with scrambling off, which
+    gives no picture at 594 MHz (live: 5B08 `D1`, E0AD `06`, E0D7 `30`). A hot plug still
+    redoes the full SCDC setup. Byte patches are checked against their original bytes
+    like hooks.
   - Hash-locked like the other patches: original hook bytes, erased overlay space and
-    the exact footprint (48 bytes) are checked.
-  - Offline tests: a synthetic image, the real dump, and simulated flashes from stock
-    (4 sectors) and from v1 (1 sector).
-  - Candidate v1 (`f191da0f…8e92`) was flashed. Its colour depth fix worked, but its
-    re-capture trigger could not clear the code. `identify` and `rtd-flash` still know
-    it as superseded, so a hub can be moved off it.
+    the exact footprint (71 bytes) are checked.
+  - Offline tests: a synthetic image, the real dump, and simulated flashes (stock →
+    v4 is 6 sectors; v3 → v4 is 1).
+  - Candidates v1 (`f191da0f…8e92`; colour depth only), v2 (`d249fa20…a695`) and v3
+    (`f5de8f43…2b8b`; SDR much smoother, scrambling still escalating) were flashed. v2 fixed the end state of every switch, but about half the switches still
+    failed in an automated soak, because the AVI could be built before the stale code
+    was cleared. Both stay known as superseded, so `rtd-flash` can move a hub off them.
 - `rtd-clear-bits ADDR MASK --volatile-ram-write`: clears allow-listed bits (`E362`
   bit 1, `5B07[7:4]`) through the debug interface, for experiments. It never writes
   flash, and unplugging the hub undoes it. The write path (`0x03` sets the data byte,
   `0x3B` writes it) was checked in the firmware's dispatch table before first use.
+- `rtd-set-bits ADDR MASK --volatile-ram-write`: sets allow-listed bits (`SETTABLE`:
+  E10B bit 3, the slow-sink 500 ms scrambling wait) for experiments. It shares the
+  write path, refusal-before-bus rules and tests with `rtd-clear-bits`.
+- Whole-firmware Ghidra pass: `research/ghidra/FunctionReport.java`, `DecompileAll.java`
+  and `auto_names.py`.
+  - It names the 752 cross-bank stubs (`call_bN_XXXX`) and classifies every unnamed
+    function by the register pages it touches. Functions that touch none get a
+    subsystem by majority over their callers and callees, across banks.
+  - On the stock image it decompiles all 11,257 functions; 1,307 stay anonymous.
+  - Outputs (pseudo-C per bank, reports, auto names and a named Ghidra project) go to
+    the gitignored `firmware/analysis/`, documented in `firmware/README.md`.
+- Raw-image findings: code and data end at 0x76000 (1.6 MiB erased above), and nothing
+  is compressed or encrypted (REA entropy scan). There are three built-in "RTK FHD"
+  EDIDs, a "DP-HDMI ADAPTOR" ID string, and per-display quirk tables (EDID monitor names)
+  in banks 2 and 5. `hdmi_sink_quirks_identify` turns a match into flag bits (E10B/E10C)
+  that change the HDMI 2.0 scrambling timing.
 - Research: section 5 of `research/DP_HDR_AND_VRR.md` (the HDR-to-SDR loop, with live
   register tables); the live stream is DP RX stream 2, whose VRR hook is bank 5 `94CC`
   (`dprx2_program_dpf_timing`, `92F2`). About 60 new names in
@@ -93,7 +120,9 @@ All notable changes to this project are documented here. The format follows
   `firmware/stock/` and patched images in `firmware/patched/` (creating them), and
   `status` also lists `firmware/*/*.bin` (for example `firmware/candidates/`). The flat
   layout in the current directory is unchanged otherwise. `status.images()` and
-  `guide.paths()` are new, with tests. `.gitignore` ignores `/firmware/`.
+  `guide.paths()` are new, with tests. `.gitignore` ignores `/firmware/*` except
+  `firmware/README.md`, which documents the sub-folders, the expected files and hashes,
+  naming, and the common dump/patch/flash/rollback commands.
 - README: the RTD2142 BT.2020 patch's effect is no longer stated as fact. Upstream
   validated it in a simulator; on one hub HDR from a Mac looked right, but a Switch 2
   gave no HDMI picture, so the hub was rolled back to stock (recorded in the

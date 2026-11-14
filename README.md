@@ -74,7 +74,7 @@ images and refuses anything else:
 | --- | --- | --- | --- |
 | VL103 PD firmware 10.48.3.22 | 32 KiB | `3763c9f3ed64316dc2faeb94dfe14dfb18da4fb1589298740a27979f3737cff3` | `6b5b0eff3e72be89b1b226739face9194f2ec30812b8c1fda5346cae90f4888e` |
 | RTD2142 flash | 2 MiB | `17eea7286255892698066e0b46085dcb5a42855f9797f067041c2ee45104d802` | `f242d130c7a0947f75bc673eb6100160c3cdb8e1d2f5cb9d1a5dca5332a742f1` |
-| RTD2142 flash, SDR-fix candidate v2 (`--sdr-fix`, not yet tested on a hub) | 2 MiB | same | `d249fa204f68e8963fe8246578319e1be544fe9a8fe656ecdda5237a8a54a695` |
+| RTD2142 flash, SDR-fix candidate v4 (`--sdr-fix`, not yet tested on a hub) | 2 MiB | same | `390ed39dc2bb2880c0251d63d6889856438c8ec775123c203f77b720740737cd` |
 
 If your dump has a different hash, your hub has different firmware and these patches
 don't apply. Please don't force them.
@@ -241,6 +241,7 @@ checked the bus. To restore, write your own stock dumps back the same way
 | `rtd-flash TARGET --base BASE --allow-brick` | **write** | Rewrite only the changed 4 KiB sectors, verified |
 | `rtd-peek ADDR…` | read | Experimental: live XDATA registers over the firmware's 0x35 debug interface; self-checks first, no write commands |
 | `rtd-clear-bits ADDR MASK --volatile-ram-write` | RAM | Experiment: clears allow-listed bits (E362 bit 1, 5B07[7:4]) over the debug interface; never flash, undone by unplugging |
+| `rtd-set-bits ADDR MASK --volatile-ram-write` | RAM | Experiment: sets allow-listed bits (E10B bit 3, the slow-sink scrambling wait) over the debug interface; never flash, undone by unplugging |
 | `survey DUMP` | no | Research: code that touches DP/HDMI colorimetry and VRR registers |
 
 The `rtd-*` commands take `--bus N` (Linux), `--mac-service N` (macOS), `--chunk
@@ -251,7 +252,9 @@ MCU stops video while it is in ISP mode, and the tool resets it afterwards.
 directory exists there, they use `firmware/stock/` for dumps and `firmware/patched/`
 for flashable images (each `.bin` with its `.json` manifest), and `status` also lists
 `firmware/*/*.bin`, for example untested builds in `firmware/candidates/`. The
-`firmware/` directory is gitignored.
+`firmware/` directory is gitignored except for
+[`firmware/README.md`](firmware/README.md), which describes the layout and the expected
+files.
 
 ## Safety model
 
