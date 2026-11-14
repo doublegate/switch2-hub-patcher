@@ -21,8 +21,11 @@ PARTS = (
     (
         'rtd2142_rx2_colorimetry',
         5,
-        (0xFD80, 0xFDC0),  # 27 bytes used
-        ((0xC476, bytes.fromhex('90 b4 03'), 'rx2_fmt_check'),),
+        (0xFD80, 0xFDC0),  # 47 bytes used
+        (
+            (0xC476, bytes.fromhex('90 b4 03'), 'rx2_fmt_check'),
+            (0xDEAD, bytes.fromhex('02 de e9'), 'rx2_field8'),  # jump-table entry, field 8
+        ),
     ),
     (
         'rtd2142_hdmi_deep_color',
@@ -32,6 +35,20 @@ PARTS = (
     ),
 )
 LJMP = 0x02
+# Single-byte patches: (bank, address, original bytes, new bytes, why). The original bytes
+# are checked like a hook's.
+BYTE_PATCHES = (
+    (
+        2,
+        0xC432,
+        bytes.fromhex('60 77'),
+        bytes.fromhex('80 77'),
+        "hdmi_scdc_scramble_check: JZ -> SJMP to the success path (C4AB). The sink's "
+        'Scrambling_Status is still read, but a missing bit no longer makes the hub rewrite '
+        'TMDS_Config with video running and, after 6 misses, turn scrambling off (no picture '
+        'at 594 MHz).',
+    ),
+)
 
 
 def sha(data):
@@ -78,6 +95,16 @@ def build(base):
                     'module': name,
                 }
             )
+    byte_patches = []
+    for bank, at, old, new, why in BYTE_PATCHES:
+        start = bank * BANK_SIZE + at
+        if base[start : start + len(old)] != old:
+            raise ValueError(f'byte patch mismatch at {bank}:{at:04x}')
+        image[start : start + len(new)] = new
+        allowed |= set(range(start, start + len(new)))
+        byte_patches.append(
+            {'bank': bank, 'address': f'{at:04x}', 'old': old.hex(), 'new': new.hex(), 'why': why}
+        )
     for (bank, at), b in memory.items():
         image[bank * BANK_SIZE + at] = b
         allowed.add(bank * BANK_SIZE + at)
@@ -86,7 +113,7 @@ def build(base):
     if not set(changed) <= allowed:
         raise ValueError('unexpected footprint')
     manifest = {
-        'experiment': 'rtd2142-sdr-fix-v2',
+        'experiment': 'rtd2142-sdr-fix-v4',
         'base_sha256': BASE_SHA,
         'output_sha256': sha(image),
         'source_sha256': {
@@ -96,8 +123,12 @@ def build(base):
         'changed_byte_count': len(changed),
         'banks_changed': sorted({i // BANK_SIZE for i in changed}),
         'hooks': hooks,
+        'byte_patches': byte_patches,
         'symbols': {s: f'{bank}:{at:04x}' for s, (bank, at) in symbols.items()},
-        'behaviour': 'DP RX stream 2: when MSA MISC1 bit 6 is clear and a VSC-derived '
+        'behaviour': 'HDMI TX: the SCDC scrambling-status check always takes its success path '
+        '(no TMDS_Config rewrites with video running, no fall-back to unscrambled output); '
+        'DP RX stream 2: format field 8 (the colorimetry code the HDMI side '
+        'reads) is 0 while MSA MISC1 bit 6 is clear; and when MISC1 bit 6 is clear and a VSC-derived '
         'colorimetry code is left in E3E6[4:0], the format check clears it (the power-up '
         'value) and reports a change so the firmware rebuilds the output from MISC0; HDMI '
         'TX: the 8-bit branch of hdmi_set_deep_color also clears 5B07[7:4] (dp_color_depth).',

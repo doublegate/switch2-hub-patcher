@@ -12,8 +12,9 @@ four commands:
 Every session first reads the debug slave's own address register (FF23), which must hold
 0x6A; if it does not, the decode is wrong for this firmware and nothing is reported.
 
-One experiment-only write exists, ``clear_bits``: it may clear bits listed in CLEARABLE
-(working RAM or a live register, never flash), using two more commands:
+Two experiment-only writes exist: ``clear_bits`` may clear bits listed in CLEARABLE and
+``set_bits`` may set bits listed in SETTABLE (working RAM or a live register, never flash),
+using two more commands:
 
   0x03 value  set the write-data byte (non-table command with low nibble 3)
   0x3B lo     write the data byte to XDATA[hi:lo]
@@ -46,6 +47,15 @@ CLEARABLE = {
         0xF0,
         'HDMI TX dp_color_depth; 0 is the 8-bit value a fresh start uses (stock firmware '
         'leaves 12-bit here after an HDR to SDR switch)',
+    ),
+}
+# The only bits set_bits may touch: address -> (settable mask, what it is).
+SETTABLE = {
+    0xE10B: (
+        0x08,
+        'hdmi_sink_quirk_flags bit 3: the slow-sink quirk; hdmi_scdc_scramble_start then waits '
+        '500 ms instead of 100 ms after the SCDC TMDS_Config write. Recomputed from the EDID '
+        'at the next hot plug',
     ),
 }
 MAX_ADDRESSES = 256
@@ -90,14 +100,25 @@ class DebugSession:
         self._send(CMD_READ, address & 0xFF)
         return self.t.read_reg(CMD_READ, 1)[0]
 
+    def _write_byte(self, address, value):
+        self._send(CMD_ADDR_HI, address >> 8)
+        self._send(CMD_WDATA, value & 0xFF, write=True)
+        self._send(CMD_WRITE, address & 0xFF, write=True)
+
     def clear_bits(self, address, mask):
         """Clear `mask` at `address` (CLEARABLE only): (before, after), re-read from the chip."""
-        check_clearable(address, mask)
+        check_allowed(CLEARABLE, 'clearable', address, mask)
         before = self.read(address)
         if before & mask:
-            self._send(CMD_ADDR_HI, address >> 8)
-            self._send(CMD_WDATA, before & ~mask & 0xFF, write=True)
-            self._send(CMD_WRITE, address & 0xFF, write=True)
+            self._write_byte(address, before & ~mask)
+        return before, self.read(address)
+
+    def set_bits(self, address, mask):
+        """Set `mask` at `address` (SETTABLE only): (before, after), re-read from the chip."""
+        check_allowed(SETTABLE, 'settable', address, mask)
+        before = self.read(address)
+        if before & mask != mask:
+            self._write_byte(address, before | mask)
         return before, self.read(address)
 
     def self_check(self):
@@ -110,18 +131,26 @@ class DebugSession:
             )
 
 
-def check_clearable(address, mask):
-    allowed = CLEARABLE.get(address)
+def check_allowed(table, kind, address, mask):
+    allowed = table.get(address)
     if allowed is None:
         raise DebugError(
-            f'{address:04X} is not a clearable address (allowed: '
-            + ', '.join(f'{a:04X}' for a in CLEARABLE)
+            f'{address:04X} is not a {kind} address (allowed: '
+            + ', '.join(f'{a:04X}' for a in table)
             + ')'
         )
     if not mask or mask & ~allowed[0]:
         raise DebugError(
-            f'mask {mask:#04x} at {address:04X} is outside the clearable bits {allowed[0]:#04x}'
+            f'mask {mask:#04x} at {address:04X} is outside the {kind} bits {allowed[0]:#04x}'
         )
+
+
+def check_clearable(address, mask):
+    check_allowed(CLEARABLE, 'clearable', address, mask)
+
+
+def check_settable(address, mask):
+    check_allowed(SETTABLE, 'settable', address, mask)
 
 
 def parse_addresses(specs):
@@ -155,3 +184,11 @@ def clear_bits(transport, address, mask, settle=0.005, sleep=time.sleep):
     with DebugSession(transport, settle, sleep) as session:
         session.self_check()
         return session.clear_bits(address, mask)
+
+
+def set_bits(transport, address, mask, settle=0.005, sleep=time.sleep):
+    """Self-check, then set allowed RAM bits: (before, after)."""
+    check_settable(address, mask)
+    with DebugSession(transport, settle, sleep) as session:
+        session.self_check()
+        return session.set_bits(address, mask)

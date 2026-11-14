@@ -16,7 +16,7 @@ from .pipeline import (
     OVERLAY_DIGESTS_SDCC_4_6_0,
     RTD2142_SDR_FIX_LABEL,
     RTD2142_SDR_FIX_STEPS,
-    RTD2142_SDR_FIX_V1,
+    RTD2142_SDR_FIX_SUPERSEDED,
     RTD2142_STEPS,
     RTD2142_STOCK,
     VL103_STEPS,
@@ -242,12 +242,12 @@ def cmd_rtd_peek(args):
     return 0
 
 
-def cmd_rtd_clear_bits(args):
+def cmd_rtd_change_bits(args, setting):
     from . import rtddbg
 
     try:
         address, mask = int(args.address, 16), int(args.mask, 16)
-        rtddbg.check_clearable(address, mask)
+        (rtddbg.check_settable if setting else rtddbg.check_clearable)(address, mask)
     except ValueError:
         return error('address and mask must be hex, e.g. E362 02')
     except rtddbg.DebugError as exc:
@@ -262,20 +262,22 @@ def cmd_rtd_clear_bits(args):
     except OSError as exc:
         return error(exc)
     print(f'transport: {transport.name}, debug interface at I2C {rtddbg.DEBUG_ADDR:#04x}')
-    print(
-        f'experimental volatile write: {address:04X} &= ~{mask:#04x} ({rtddbg.CLEARABLE[address][1]})'
-    )
+    table = rtddbg.SETTABLE if setting else rtddbg.CLEARABLE
+    op = '|=' if setting else '&= ~'
+    print(f'experimental volatile write: {address:04X} {op}{mask:#04x} ({table[address][1]})')
     try:
-        before, after = rtddbg.clear_bits(transport, address, mask)
+        change = rtddbg.set_bits if setting else rtddbg.clear_bits
+        before, after = change(transport, address, mask)
     except (OSError, rtddbg.DebugError) as exc:
         return error(exc)
     finally:
         transport.close()
     print(f'{address:04X}  before {before:#04x}  after {after:#04x}')
-    if not before & mask:
-        print('bits were already clear; nothing written')
-    elif after & mask:
-        print('note: the bits read back set again (the firmware may have re-set them)')
+    wanted = mask if setting else 0
+    if before & mask == wanted:
+        print(f'bits were already {"set" if setting else "clear"}; nothing written')
+    elif after & mask != wanted:
+        print('note: the bits read back changed again (the firmware may have rewritten them)')
     print('unplug the hub to restore its RAM')
     return 0
 
@@ -295,7 +297,7 @@ def cmd_rtd_flash(args):
         RTD2142_STOCK: 'RTD2142 stock',
         RTD2142_STEPS[-1][2]: 'RTD2142 patched',
         RTD2142_SDR_FIX_STEPS[-1][2]: RTD2142_SDR_FIX_LABEL,
-        RTD2142_SDR_FIX_V1[0]: RTD2142_SDR_FIX_V1[1],
+        **dict(RTD2142_SDR_FIX_SUPERSEDED),
     }
     if platform.system() == 'Darwin' and args.bus is None:
         print(
@@ -507,6 +509,15 @@ def main(argv=None):
     p.add_argument('--volatile-ram-write', action='store_true')
     add_transport_args(p, reset=False)
     p = sub.add_parser(
+        'rtd-set-bits',
+        help='experiment: set allow-listed RAM bits over the 0x35 debug interface '
+        '(volatile; never flash)',
+    )
+    p.add_argument('address', metavar='ADDR', help='hex XDATA address (allow-listed: E10B)')
+    p.add_argument('mask', metavar='MASK', help='hex bits to set (E10B: 08)')
+    p.add_argument('--volatile-ram-write', action='store_true')
+    add_transport_args(p, reset=False)
+    p = sub.add_parser(
         'survey',
         help='research: list RTD2142 code touching DP/HDMI '
         'colorimetry and VRR registers (read-only)',
@@ -545,8 +556,8 @@ def main(argv=None):
         return cmd_rtd_flash(args)
     if args.command == 'rtd-peek':
         return cmd_rtd_peek(args)
-    if args.command == 'rtd-clear-bits':
-        return cmd_rtd_clear_bits(args)
+    if args.command in ('rtd-clear-bits', 'rtd-set-bits'):
+        return cmd_rtd_change_bits(args, args.command == 'rtd-set-bits')
     if args.command == 'survey':
         return cmd_survey(args)
     return cmd_identify(args)

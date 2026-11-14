@@ -71,15 +71,29 @@ RTD2142_SDR_FIX_STEPS = (
     (
         'DP RX colorimetry re-capture after HDR -> SDR; HDMI 8-bit colour depth',
         patch_rtd2142_sdr_fix.build,
-        'd249fa204f68e8963fe8246578319e1be544fe9a8fe656ecdda5237a8a54a695',
+        '390ed39dc2bb2880c0251d63d6889856438c8ec775123c203f77b720740737cd',
     ),
 )
-RTD2142_SDR_FIX_LABEL = 'RTD2142 SDR-fix candidate v2 (not yet tested on a hub)'
-# Superseded candidate v1 (flashed and tested 2026-11-14: fixed the HDMI colour depth but
-# not the stale colorimetry). Known so rtd-flash can move a hub off it; not buildable.
-RTD2142_SDR_FIX_V1 = (
-    'f191da0f7201fe26c9f9924b11a7f486ce18faa305c145b806cb0f251e518e92',
-    'RTD2142 SDR-fix candidate v1 (superseded; flash stock or v2 over it)',
+RTD2142_SDR_FIX_LABEL = 'RTD2142 SDR-fix candidate v4 (not yet tested on a hub)'
+# Superseded candidates, still known so rtd-flash can move a hub off them; not buildable.
+# v1 (flashed 2026-11-14): fixed the HDMI colour depth, not the stale colorimetry.
+# v2 (flashed 2026-11-14): fixed the steady state on every switch; about half the switches
+# still failed (AVI built during the restart before the stale code was cleared).
+# v3 (flashed 2026-11-14): closed that race; SDR much smoother, but the HDMI scrambling
+# check still escalated on this TV (TMDS_Config rewrites, scrambling turned off: no signal).
+RTD2142_SDR_FIX_SUPERSEDED = (
+    (
+        'f191da0f7201fe26c9f9924b11a7f486ce18faa305c145b806cb0f251e518e92',
+        'RTD2142 SDR-fix candidate v1 (superseded; flash stock or v4 over it)',
+    ),
+    (
+        'd249fa204f68e8963fe8246578319e1be544fe9a8fe656ecdda5237a8a54a695',
+        'RTD2142 SDR-fix candidate v2 (superseded; flash stock or v4 over it)',
+    ),
+    (
+        'f5de8f43f8c44338822bec2ec31b67bda326f5e985f867410caf6f099cf22b8b',
+        'RTD2142 SDR-fix candidate v3 (superseded; flash stock or v4 over it)',
+    ),
 )
 
 
@@ -108,7 +122,7 @@ OVERLAY_DIGESTS_SDCC_4_6_0 = {
     'query02': '228747974dbb46faf5f4668d290aa9d53b90c36cf4015e9ea449774f9b173fe0',
     'versions': 'da65a9f8b9ce0866c928871116bee7b71db609eec14fabb99d41da4b702f307b',
     'rtd2142_hdr_avi': '8344a23a15f69a898616bc24017a1c83603bec0d19b5659a73a2173c87a14bdd',
-    'rtd2142_sdr_fix': '16e2ecda56e945506c2189cbbab4678e056eb6a0a96ae49705abbe37cc9680f4',
+    'rtd2142_sdr_fix': '560564db59d05c45454e830a341221421ae92e82c5fcb420940829eb89793ac9',
 }
 
 
@@ -220,7 +234,7 @@ def _known_images():
                     f'{name}); not a final image, do not flash'
                 )
     known[RTD2142_SDR_FIX_STEPS[-1][2]] = RTD2142_SDR_FIX_LABEL
-    known[RTD2142_SDR_FIX_V1[0]] = RTD2142_SDR_FIX_V1[1]
+    known.update(RTD2142_SDR_FIX_SUPERSEDED)
     return known
 
 

@@ -114,6 +114,51 @@ class ClearBitsTests(unittest.TestCase):
         self.assertIn('E362  before 0x23  after 0x21', out.getvalue())
 
 
+class SetBitsTests(unittest.TestCase):
+    def test_sets_only_the_allowed_bit(self):
+        chip = FakeDebugSlave({0xE10B: 0x01})
+        self.assertEqual(rtddbg.set_bits(chip, 0xE10B, 0x08, sleep=no_sleep), (0x01, 0x09))
+        writes = [(reg, data) for reg, data in chip.log if reg in rtddbg.WRITE_COMMANDS]
+        self.assertEqual(writes, [(0x03, b'\x09'), (0x3B, b'\x0b')])
+        self.assertFalse(chip.debug)
+
+    def test_nothing_is_written_when_already_set(self):
+        chip = FakeDebugSlave({0xE10B: 0x09})
+        self.assertEqual(rtddbg.set_bits(chip, 0xE10B, 0x08, sleep=no_sleep), (0x09, 0x09))
+        self.assertFalse([reg for reg, _ in chip.log if reg in rtddbg.WRITE_COMMANDS])
+
+    def test_other_addresses_and_bits_are_refused_before_the_bus(self):
+        for address, mask in ((0xE10B, 0x01), (0xE10B, 0x18), (0xE10C, 0x08), (0xE362, 0x02)):
+            chip = FakeDebugSlave({0xE10B: 0x00})
+            with self.assertRaises(rtddbg.DebugError, msg=(address, mask)):
+                rtddbg.set_bits(chip, address, mask, sleep=no_sleep)
+            self.assertEqual(chip.log, [])
+
+    def test_cli_sets_and_reports(self):
+        chip = FakeDebugSlave({0xE10B: 0x00})
+        out = io.StringIO()
+        with (
+            mock.patch.object(cli, 'open_transport', return_value=chip),
+            mock.patch.object(rtddbg.time, 'sleep'),
+            contextlib.redirect_stdout(out),
+        ):
+            code = cli.main(['rtd-set-bits', 'E10B', '08', '--volatile-ram-write'])
+        self.assertEqual(code, 0)
+        self.assertIn('E10B  before 0x00  after 0x08', out.getvalue())
+
+    def test_cli_set_needs_the_flag_and_the_allowlist(self):
+        for argv in (
+            ['rtd-set-bits', 'E10B', '08'],
+            ['rtd-set-bits', 'E362', '02', '--volatile-ram-write'],
+        ):
+            with (
+                mock.patch.object(cli, 'open_transport') as opened,
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                self.assertNotEqual(cli.main(argv), 0, argv)
+            opened.assert_not_called()
+
+
 class PeekCommandTests(unittest.TestCase):
     def test_cli_prints_named_registers(self):
         chip = FakeDebugSlave({0xB130: 0x80})

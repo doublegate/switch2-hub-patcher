@@ -67,6 +67,9 @@ def rtd2142_sdr_fix_image():
         image[base + lo : base + hi] = b'\xff' * (hi - lo)
         for at, old, _ in hooks:
             image[base + at : base + at + 3] = old
+    for bank, at, old, _, _ in patch_rtd2142_sdr_fix.BYTE_PATCHES:
+        base = bank * patch_rtd2142_sdr_fix.BANK_SIZE
+        image[base + at : base + at + len(old)] = old
     return bytes(image)
 
 

@@ -1,4 +1,4 @@
-; RTD2142 bank 5, DP RX stream 2 (the hub's input). CANDIDATE v2, not yet tested on a hub.
+; RTD2142 bank 5, DP RX stream 2 (the hub's input). CANDIDATE v3, not yet tested on a hub.
 ;
 ; Stock bug: in HDR the source signals colorimetry in the VSC SDP (MSA MISC1 bit 6 set) and
 ; rx2_colorimetry_from_vsc (C37B) stores a colorimetry code in E3E6[4:0] (BT.2020 YCbCr =
@@ -8,8 +8,14 @@
 ; the AVI InfoFrame says BT.2020 over SDR video with an SDR-gamma HDR packet; TVs flip between
 ; SDR, HDR and HLG. DP 1.4a Table 2-96: with MISC1 bit 6 clear, MISC0 is authoritative.
 ;
-; Hook (checked by patch_rtd2142_sdr_fix.py):
+; Hooks (checked by patch_rtd2142_sdr_fix.py):
 ;   C476  mov dptr,#0xb403  ->  ljmp rx2_fmt_check   (rx2_format_matches_q, polled)
+;   DEAD  ljmp 0xdee9       ->  ljmp rx2_field8      (rx2_get_format_field case 8)
+;
+; v3: v2 on the hub fixed the steady state on every switch, but about half the switches
+; still failed: the HDMI side reads field 8 (E3E6[4:0]) and builds the AVI during its own
+; restart, which can be before rx2_fmt_check runs. rx2_field8 closes that race: with MISC1
+; bit 6 clear it returns 0 (no VSC colorimetry) whatever E3E6 holds.
 ;
 ; rx2_fmt_check: with MISC1 bit 6 clear, a non-zero E3E6[4:0] can only be left over from the
 ; VSC SDP. Clear it (the power-up value, which gives a stable, correct picture) and report a
@@ -37,3 +43,15 @@ rx2_stock_b403:
     mov dptr,#0xb403
 rx2_stock:
     ljmp 0xc479             ; stock continues: movx a,@dptr with DPTR = B403
+
+rx2_field8::                ; rx2_get_format_field(8): colorimetry code for the HDMI side
+    mov dptr,#0xb403
+    movx a,@dptr
+    jnb acc.6,rx2_field8_none   ; colorimetry in MISC0: no VSC code applies
+    mov dptr,#0xe3e6        ; stock: A = E3E6 & 0x1F
+    movx a,@dptr
+    anl a,#0x1f
+    ljmp 0xdf00             ; stock tail: R7 = A, R6 = 0, ret
+rx2_field8_none:
+    clr a
+    ljmp 0xdf00
