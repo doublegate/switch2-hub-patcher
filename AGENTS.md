@@ -23,7 +23,7 @@
 
 - **What it is:** Offline patcher that turns user-made firmware dumps of the Cable Matters 201031-BLK USB-C hub (VIA VL103 PD controller + Realtek RTD2142 DP→HDMI) into Switch 2 dock firmware (TV mode, HDR colours). It never talks to hardware and ships no vendor firmware.
 - **Stack:** Python ≥ 3.9, standard library only (setuptools packaging), plus 8051 assembly in `switch2_hub_patcher/asm/` assembled at run time by SDCC (`sdas8051`, `sdld`).
-- **Build / run:** `pip install .`; commands: `vl103`/`rtd2142` (patch, `--manifest`), `identify`, `doctor`, `status`, `guide` (interactive), `vl103-devices|dump|flash` (fwupd vli, private quirk state dir), `rtd-probe|dump|flash` (Realtek ISP over Linux /dev/i2c-N or macOS IOAVService), `find-aux [--probe]`, `survey`.
+- **Build / run:** `pip install .`; commands: `vl103`/`rtd2142` (patch, `--manifest`), `identify`, `doctor`, `status`, `guide` (interactive), `vl103-devices|dump|flash` (fwupd vli, private quirk state dir), `rtd-probe|dump|flash` (Realtek ISP over Linux /dev/i2c-N or macOS IOAVService), `rtd-peek` (experimental, read-only, firmware debug interface at I2C 0x35), `find-aux [--probe]`, `survey`.
 - **Test:** `python3 -m unittest discover -s tests`. Synthetic-image tests (`tests/synthetic.py`, no vendor code) run every builder offline when SDCC is present, with outputs pinned for SDCC 4.6.0. The real-dump tests skip unless `S2HUB_VL103_DUMP` / `S2HUB_RTD2142_DUMP` point at stock dumps.
 - **Lint / format gate:** `ruff check .`, `ruff format --check .` (single quotes, 100 cols, rules in `pyproject.toml`), `pyright` (py3.9, `[tool.pyright]`), `npx markdownlint-cli2@0.24.0 "**/*.md"` (the CI pin; older versions lack MD060), `bash scripts/agy-review-selftest.sh`. CI (`.github/workflows/ci.yml`) runs these plus the tests on Ubuntu/macOS × Python 3.9/3.13.
 
@@ -36,8 +36,9 @@
 ### Gotchas / institutional knowledge
 
 - Supported images are exactly the four hashes in the README table. Never loosen the hash checks to accept other dumps.
-- `OVERLAY_DIGESTS_SDCC_4_6_0` in `pipeline.py`: the five VL103 entries are confirmed (a real stock VL103 dump passed the pipeline with SDCC 4.6.0 on 2026-11-14 and produced `6b5b0eff…888e`); `rtd2142_hdr_avi` stays provisional until a real RTD2142 dump does the same.
-- macOS IOAVService I2C semantics (offset handling, transfer size) are assumptions until a hub is attached; `rtd-flash` writes only after a full same-session read matches the base hash.
+- `OVERLAY_DIGESTS_SDCC_4_6_0` in `pipeline.py`: all six entries are confirmed (on 2026-11-14 real stock VL103 and RTD2142 dumps passed the pipeline with SDCC 4.6.0 and produced `6b5b0eff…888e` and `f242d130…42f1`).
+- macOS IOAVService I2C reads work on the real hub (2026-11-14: `rtd-dump` about 9 min per read at 32-byte chunks); the first macOS `rtd-flash` (stock -> patched, about 18 min) succeeded the same day. `rtd-flash` writes only after a full same-session read matches the base hash.
+- Tests must never reach real hardware: with a hub attached to the Mac, an unmocked `cmd_rtd_dump`/`transport_args` talks to the live chip. Don't run the suite while a dump or flash is in progress.
 - Absolute home paths must never be committed (public repo): `.githooks/` (enable with `git config core.hooksPath .githooks`) blocks them on commit/push and CI re-checks. Master-Claude writes home-relative `@~/` imports (its `mc-sync` converts legacy absolute ones); never run it here with `--absolute-imports`.
 - Never accept a Switch "Dock Update" on a patched hub (no update handler).
 - `*.bin` is gitignored. Never commit firmware dumps or patched images, because they are vendor property.
@@ -51,9 +52,10 @@
 - `switch2_hub_patcher/cli.py` — CLI entry point
 - `switch2_hub_patcher/hexfile.py` — shared SDCC assemble + guarded Intel HEX loader
 - `switch2_hub_patcher/dpaux.py`, `rtd2142_map.py` — read-only AUX bus finder; RTD2142 register xref survey (names from the RTD2172 DB)
+- `switch2_hub_patcher/rtddbg.py` — read-only 0x35 debug client (`tests/fake_dbg.py` simulates it); never add its write commands without a separate review
 - `switch2_hub_patcher/rtdisp.py`, `i2c.py`, `fwupd.py`, `status.py`, `guide.py` — RTD2142 ISP port of flashrom (`tests/fake_rtd.py` simulates the chip), I2C transports, fwupd wrapper, checklist, walk-through
 - `CHANGELOG.md` (Keep a Changelog; add to `[Unreleased]`), `CONTRIBUTING.md` (hash-lock and write-guard rules), `SECURITY.md`, `.github/` (CI, issue/PR templates, Dependabot)
-- `research/` — DP-port HDR and VRR notes and a draft (unhooked) VSC SDP routine; not part of the pipeline
+- `research/` — DP-port HDR and VRR notes, a draft (unhooked) VSC SDP routine, the RTD2142 symbol map (`rtd2142_symbols.tsv`) and Ghidra headless scripts (`ghidra/`); not part of the pipeline. Ghidra projects and decoded register tables stay outside the repo (gitignored)
 - `contrib/` — fwupd quirk and flashrom XT25F16B patch
 - `tests/test_pipeline.py` — unit tests plus dump-gated end-to-end tests
 

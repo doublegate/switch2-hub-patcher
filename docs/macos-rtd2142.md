@@ -5,8 +5,10 @@ The RTD2142 is reached over the hub's DisplayPort input, not over USB, so the
 computer has to drive a display through the hub. A Mac can. A desktop whose only
 display output is a discrete GPU without a USB-C DisplayPort port cannot.
 
-The macOS path (the `rtd-*` commands over the private IOAVService I²C interface) is
-**untested on this chip**. Steps 1 to 4 are read-only or offline. Step 5 writes
+The macOS path (the `rtd-*` commands over the private IOAVService I²C interface) has
+**read** this chip: on 2026-11-14, steps 1 to 4 produced the stock dump and the
+hardware-tested patched image on a MacBook Pro (Apple M5 Max), and step 5 flashed
+it (one hub so far). Steps 1 to 4 are read-only or offline. Step 5 writes
 flash; read the cautions there first.
 
 ## 1. Set up
@@ -45,10 +47,13 @@ python3 -m switch2_hub_patcher identify rtd2142-stock.bin
   Realtek ISP (default 0).
 - `rtd-probe` must print `flash ID 0b4015 (XT25F16B)` and a `status register` line
   without `block protection set` after it.
-- The monitor may blank briefly while the chip is in ISP mode; the tool resets the
-  hub MCU when it is done.
+- The monitor may blank while the chip is in ISP mode, or keep its picture (it did on
+  the first Mac run); the tool resets the hub MCU when it is done.
 - `rtd-dump` reads the full 2 MiB twice and requires both reads to match. macOS
-  transfers 32 bytes at a time by default (`--chunk`), so expect it to take a while.
+  transfers 32 bytes at a time by default (`--chunk`): expect about 9 minutes per
+  read, 18 in all. Outside a terminal it prints a progress line every 10 %.
+- Don't unplug the hub or stop the command mid-read. If you do, replug the hub before
+  the next command, since the MCU may still be in ISP mode.
 - `identify` must report RTD2142 stock,
   `17eea7286255892698066e0b46085dcb5a42855f9797f067041c2ee45104d802`. Any other hash
   means different firmware: stop, the patch does not apply.
@@ -77,8 +82,11 @@ Before writing:
 
 - Have a **SOIC-8 clip and an SPI programmer** (for example a CH341A) on hand. If a
   write leaves the RTD2142 unresponsive over I²C, that is the only recovery.
-- The README advises doing the first RTD2142 write on Linux. If you write from
-  macOS, you are the first to do so on this chip.
+- The first macOS write on this chip (2026-11-14) succeeded, but that is one hub.
+  Linux with flashrom remains the better-tested path.
+- It takes about 18 minutes: a whole-chip read (which must match `--base`), the
+  sector rewrite, then a second whole-chip read. Don't unplug the hub, and keep the
+  Mac awake (for example `caffeinate -dims` in front of the command).
 
 ```sh
 python3 -m switch2_hub_patcher rtd-flash rtd2142-patched.bin --base rtd2142-stock.bin --allow-brick --mac-service N

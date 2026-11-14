@@ -28,6 +28,32 @@ All notable changes to this project are documented here. The format follows
   HDMI 2.1-class RTD2175N converter that already passes VRR from other sources), why the
   fix is RTD2142 firmware rather than VL103, the missing live-register tool (the 0x35
   debug interface), and an ordered work plan starting from RTD2142 access.
+- `research/rtd2142_symbols.tsv` and `research/ghidra/*.java`: a curated name map for
+  the RTD2142 stock firmware (functions, XDATA variables, registers) and Ghidra 12
+  headless scripts to seed functions in a raw 8051 bank, apply the names, decompile
+  around given addresses and print listings. Addresses and names only, no firmware.
+- `research/DP_HDR_AND_VRR.md` findings from the stock RTD2142 dump: the DP output is
+  TX1; the firmware already forwards the HDR metadata SDP (type 87h) on it and has a
+  VSC-colorimetry path (header 05h/13h, `SEC_FUNCTION_CTRL` bit 7, MISC1 bit 6) that
+  it takes only for extended input colorimetry; the stock firmware never touches the
+  DP RX hardware VRR registers. Also the decoded (untested) 0x35 debug protocol and
+  the bank-call layout. `research/dp_hdr_vsc.asm` now uses the TX1 addresses and
+  records the revised approach.
+- `rtd-peek ADDR|START-END …` (experimental, read-only): reads live RTD2142 XDATA
+  registers through the firmware's debug interface at I2C 0x35, as decoded from the
+  stock dump (`switch2_hub_patcher/rtddbg.py`). It sends only enter, address-high, read
+  and leave commands, refuses to report unless `FF23` reads back `0x6A`, and caps a run
+  at 256 addresses. Tested against `tests/fake_dbg.py`; not yet run on a chip. The
+  transports take the I2C address as a parameter.
+- `research/ghidra/db_to_tsv.py`: turns the decoded RTD2172 register database into
+  Ghidra labels (`NAME_ADDR`) for every bank, so decompiles name all 6,600+ registers.
+- VRR findings from the stock dump in `research/DP_HDR_AND_VRR.md`: stream 1's display
+  format generator runs in full-last-line mode and the hardware VRR mode
+  (`vrr_mode`, `vsc_for_vrr_en`) is never enabled; `MSA_TIMING_PAR_IGNORED` is not in a
+  ROM table; the hook is the end of the DPF timing routine (bank 6 `A0BC`).
+- `.gitignore` covers the research by-products that are derived from vendor firmware or
+  tools: Ghidra projects and exports (`*.gpr`, `*.rep/`, `*.gzf`, lock files), the
+  decoded register label tables and the RTD2172 DB's `ReadAll.txt`.
 
 ### Changed
 
@@ -44,11 +70,29 @@ All notable changes to this project are documented here. The format follows
   table separator rows in `README.md` and `research/DP_HDR_AND_VRR.md` are now spaced.
 - The SDCC 4.6.0 VL103 overlay digests are confirmed rather than provisional: a real stock
   VL103 dump (`3763c9f3…cff3`) passed the six-step pipeline with SDCC 4.6.0 and produced
-  the hardware-tested image `6b5b0eff…888e`. The RTD2142 overlay is still provisional.
+  the hardware-tested image `6b5b0eff…888e`. The RTD2142 overlay is confirmed too: a real
+  stock RTD2142 dump (`17eea728…d802`) patched to the hardware-tested `f242d130…42f1`.
+- The macOS RTD2142 path has read a real chip: `find-aux --probe`, `rtd-probe` (XT25F16B,
+  no block protection) and a two-read `rtd-dump` that matched the stock image, at about
+  9 minutes per read. It has also written one: `rtd-flash` moved a stock RTD2142 to the
+  hardware-tested patched image `f242d130…42f1` (one 4 KiB sector, verified, then a
+  whole-chip re-read; about 18 minutes in all). The README and `docs/macos-rtd2142.md`
+  say so.
+
+- `rtd-dump` and `rtd-flash` report progress when stderr is not a terminal (a log, a
+  pipe, an agent): one line per 10 % with the elapsed time. Before, only a terminal got
+  progress, so a slow whole-chip read over macOS IOAVService printed nothing for many
+  minutes. `rtd-flash` reports both of its whole-chip reads: the shared progress
+  printer starts a new pass when the byte count goes back down (the final re-read
+  used to print nothing).
 
 ### Fixed
 
 - Typo in the `patch_versions` manifest's limits text ("and3W" -> "and 3W").
+- The `guide` tests no longer reach real hardware. With a hub attached to a Mac, a test
+  that answered "y" to every prompt ran a real `rtd-dump` and ISP probe against the live
+  RTD2142 (and hung while another dump held the chip). Every hardware command the guide
+  calls is now mocked for all guide tests.
 
 ## [1.1.0] - 2026-11-13
 

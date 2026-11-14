@@ -94,8 +94,8 @@ roll the hub back.
   - **Linux** with an AMD/Intel GPU whose DisplayPort AUX shows up as `/dev/i2c-*`. A
     VM won't do for the RTD2142 step. Load `i2c-dev` with `sudo modprobe i2c-dev` if
     `/dev/i2c-*` is missing.
-  - **macOS on Apple silicon.** See [macOS](#macos-apple-silicon); this path is new
-    and untested on this chip.
+  - **macOS on Apple silicon.** See [macOS](#macos-apple-silicon); reading and
+    flashing the RTD2142 both work (2026-11-14).
 - **[fwupd](https://github.com/fwupd/fwupd)** with the `vli` plugin for the VL103
   (`brew install fwupd` on macOS). The `vl103-*` commands ship
   `contrib/via-vl817-vl103.quirk`, which binds this hub's generic VIA USB IDs, and use
@@ -155,9 +155,10 @@ give your user access to the USB device and `/dev/i2c-*`. Use `--bus N` (from
   onto macOS's private IOAVService I²C path, the one DDC/CI brightness tools use.
   Connect the hub to a USB-C/Thunderbolt port with a monitor on the hub, then run
   `switch2-hub-patcher find-aux --probe` to find it.
-- That path is new and has not been tested on this chip. **Start with `rtd-probe` and
-  `rtd-dump`, and compare the dump with a Linux dump if you can.** Do your first write
-  on Linux and keep the SOIC-8 clip ready. On macOS, `rtd-flash` still refuses to
+- Reading and writing work: on 2026-11-14 `rtd-probe` and `rtd-dump` read a stock
+  RTD2142 through this path (about 9 minutes per full read; the picture stayed on),
+  and `rtd-flash` patched it (about 18 minutes, most of it the two whole-chip reads).
+  That is one hub so far, so keep the SOIC-8 clip ready. On macOS, `rtd-flash` still refuses to
   write unless a full read of the chip, made in that same run, matches the base
   image's hash.
 - Step by step: [RTD2142 on macOS](docs/macos-rtd2142.md).
@@ -229,6 +230,7 @@ checked the bus. To restore, write your own stock dumps back the same way
 | `rtd-probe` | read | Enter ISP mode; flash JEDEC ID and status register |
 | `rtd-dump OUT [--reads N]` | read | Whole 2 MiB flash; N reads must agree (default 2) |
 | `rtd-flash TARGET --base BASE --allow-brick` | **write** | Rewrite only the changed 4 KiB sectors, verified |
+| `rtd-peek ADDR…` | read | Experimental: live XDATA registers over the firmware's 0x35 debug interface; self-checks first, no write commands |
 | `survey DUMP` | no | Research: code that touches DP/HDMI colorimetry and VRR registers |
 
 The `rtd-*` commands take `--bus N` (Linux), `--mac-service N` (macOS), `--chunk
@@ -273,9 +275,11 @@ switch2_hub_patcher/
   fwupd.py           fwupdtool vli wrapper with the bundled quirk (data/)
   dpaux.py           DP AUX discovery;  status.py / guide.py  checklist, walk-through
   rtd2142_map.py     register names for `survey`
+  rtddbg.py          read-only 0x35 debug client for `rtd-peek`
 contrib/             fwupd quirk, flashrom XT25F16B patch
-research/            DP-port HDR and VRR notes, draft routine, register-DB decoder
-tests/               offline tests (synthetic images, simulated RTD2142)
+research/            DP-port HDR and VRR notes, draft routine, register-DB decoder,
+                     RTD2142 symbol map, Ghidra headless scripts (research/ghidra/)
+tests/               offline tests (synthetic images, simulated RTD2142 and debug slave)
 ```
 
 ## Development
@@ -309,6 +313,13 @@ It is not part of the patch pipeline.
 - **VRR.** The same database documents a hardware VRR mode in the DP receiver
   (`vrr_mode`/`deonly_mode`), which may remove the need to rewrite the input lock.
 - `survey` finds the matching code in a real dump.
+- **From the stock dump (2026-11-14):** the DP output is TX1, the firmware already
+  forwards the HDR metadata SDP there and has its own VSC-colorimetry path, which it
+  takes only for "extended" input colorimetry. The likely DP-port fix is a hook at
+  that gate. For VRR, the receiver runs in full-last-line mode and never enables the
+  hardware VRR mode; the fix order is in the notes. The 0x35 live-register debug
+  protocol is decoded, and the read-only `rtd-peek` uses it (untested on a chip).
+  `research/ghidra/` and `research/rtd2142_symbols.tsv` reproduce the analysis.
 
 ## Credits
 
