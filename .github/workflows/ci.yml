@@ -33,6 +33,8 @@ jobs:
         run: .githooks/check-home-paths HEAD
       - name: markdownlint
         run: npx --yes markdownlint-cli2@0.24.0 "**/*.md"
+      - name: Antigravity reviewer self-test
+        run: bash scripts/agy-review-selftest.sh
 
   test:
     strategy:

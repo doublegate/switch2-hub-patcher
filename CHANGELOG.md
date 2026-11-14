@@ -19,7 +19,8 @@ All notable changes to this project are documented here. The format follows
 - Antigravity CLI (`agy`) PR reviewer: `.github/workflows/antigravity-review.yml` and
   `scripts/agy-review*.sh` from the antigravity-pr-review template, run on a self-hosted
   runner labelled `agy`, with a project style guide in `.github/agy-review.md` (hash
-  locks, write guards, no firmware in the repository). The vendored
+  locks, write guards, no firmware in the repository). CI's `lint` job runs
+  `scripts/agy-review-selftest.sh`. The vendored
   `.github/AGY-REVIEWER.md` is excluded from markdownlint.
 - `research/DP_HDR_AND_VRR.md`: what the official dock does differently for VRR (an
   HDMI 2.1-class RTD2175N converter that already passes VRR from other sources), why the
