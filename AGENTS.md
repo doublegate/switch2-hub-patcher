@@ -35,14 +35,14 @@
 
 ### Gotchas / institutional knowledge
 
-- Supported images are exactly the hashes in the README table (four, plus the RTD2142 SDR-fix candidate `f191da0f…8e92`, which is labelled as not yet tested on a hub until it is). Never loosen the hash checks to accept other dumps.
-- The RTD2142 BT.2020 patch (`f242d130…42f1`) was validated upstream in a simulator only. On one hub it gave correct HDR from a Mac but no HDMI picture from a Switch 2; the hub is back on stock (2026-11-14). Don't describe it as hardware-tested.
+- Supported images are exactly the hashes in the README table (four, plus the RTD2142 SDR-fix candidate v2 `d249fa20…a695`, labelled as not yet tested on a hub until it is, and the superseded v1 `f191da0f…8e92`, known only so `rtd-flash` can move a hub off it). Never loosen the hash checks to accept other dumps.
+- The RTD2142 BT.2020 patch (`f242d130…42f1`) was validated upstream in a simulator only. On one hub it gave correct HDR from a Mac but no HDMI picture from a Switch 2, while the same Switch worked on SDR-fix v1 (no BT.2020 change). Don't describe it as hardware-tested.
 - `OVERLAY_DIGESTS_SDCC_4_6_0` in `pipeline.py`: the first six entries are confirmed (on 2026-11-14 real stock VL103 and RTD2142 dumps passed the pipeline with SDCC 4.6.0 and produced `6b5b0eff…888e` and `f242d130…42f1`); `rtd2142_sdr_fix` is recorded from the real stock dump, for a candidate image.
 - macOS IOAVService I2C reads work on the real hub (2026-11-14: `rtd-dump` about 9 min per read at 32-byte chunks); the first macOS `rtd-flash` (stock -> patched, about 18 min) succeeded the same day. `rtd-flash` writes only after a full same-session read matches the base hash.
 - Tests must never reach real hardware: with a hub attached to the Mac, an unmocked `cmd_rtd_dump`/`transport_args` talks to the live chip. Don't run the suite while a dump or flash is in progress.
 - Absolute home paths must never be committed (public repo): `.githooks/` (enable with `git config core.hooksPath .githooks`) blocks them on commit/push and CI re-checks. Master-Claude writes home-relative `@~/` imports (its `mc-sync` converts legacy absolute ones); never run it here with `--absolute-imports`.
 - Never accept a Switch "Dock Update" on a patched hub (no update handler).
-- `*.bin` is gitignored. Never commit firmware dumps or patched images, because they are vendor property.
+- `*.bin` and `/firmware/` are gitignored. Never commit firmware dumps or patched images, because they are vendor property. Local layout: `firmware/stock/` (dumps), `firmware/patched/` (flashable images + `.json` manifests), `firmware/candidates/` (untested builds); `status` and `guide` use it when `firmware/` exists (flat cwd otherwise). Dump-gated tests here: `S2HUB_VL103_DUMP=firmware/stock/vl103-stock.bin S2HUB_RTD2142_DUMP=firmware/stock/rtd2142-stock.bin`.
 - The flashing workflow (fwupd `vli` plugin with `contrib/via-vl817-vl103.quirk`, flashrom `realtek_mst_i2c_spi`) is Linux-only and documented in the README. The patcher itself runs anywhere SDCC does.
 
 ### Where things live

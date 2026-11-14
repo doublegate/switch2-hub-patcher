@@ -160,7 +160,6 @@
 2	CODE	4af5	set_bit3_at_dptr
 *	EXTMEM	e0e6	hdmi_in_fmt	[7:3] input bits per colour (8, 10, 12)
 *	EXTMEM	e0e7	hdmi_in_colorimetry_q	[4:0] colorimetry code from the RX format query (field 8), [6:5] field 7; keeps 0E after HDR -> SDR
-*	EXTMEM	e09d	hdmi_hdr_state_q	D0 after an HDR session, 00 after a fresh start in SDR
 #
 # --- DP RX stream 2 (the hub's input) format and colorimetry, bank 5 ---
 5	CODE	dcf4	rx2_capture_format	MISC1 (B403) bit6 set: VSC path (B446.., sets flag 0x2E); else MISC0 (B402) path; fills DE11..DE13
@@ -186,3 +185,14 @@
 5	CODE	fd80	rx2_fmt_check	SDR-fix candidate overlay (not stock)
 2	CODE	ff00	hdmi_deep_color_off_fix	SDR-fix candidate overlay (not stock)
 *	CODE	17fd	call_b5_rx2_stream_good	-> bank 5 EF1A
+5	CODE	d284	rx2_colorimetry_from_misc0	MISC0 colorimetry -> E3E7[6:3]; never touches the VSC code in E3E6[4:0]
+5	CODE	4e85	rx2_msa_colorimetry_ptr	DPTR = E3E7; A = E3E7 & 0x87
+5	CODE	4ed6	rx2_pixel_encoding_ptr	DPTR = E3E5; A = E3E5 & 0xF8
+5	CODE	4d63	rx2_get_pixel_encoding	A = E3E5 & 7
+*	EXTMEM	e3e5	rx2_pixel_encoding	[2:0] pixel encoding (1/2 YCbCr kinds, 3 ..., 5, 6)
+*	EXTMEM	e3e7	rx2_msa_colorimetry	[6:3] colorimetry from MISC0 (written by rx2_colorimetry_from_misc0)
+2	CODE	e898	hdmi_edid_read_block_q	DDC read from the sink (slave A0) via 1132; stores a derived byte in E09D
+2	CODE	fd71	hdmi_edid_changed_q	C = 1 when E09D != E09F
+2	CODE	b385	hdmi_edid_byte_store_q	E09D = processed EDID byte (1A9E), counts CD19
+*	EXTMEM	e09d	hdmi_edid_value_q	derived from the sink's EDID; D0 after a re-read (an effect of re-detects, not a cause)
+*	EXTMEM	e09f	hdmi_edid_value_saved_q	compared with E09D by hdmi_edid_changed_q

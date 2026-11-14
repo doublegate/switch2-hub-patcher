@@ -37,7 +37,7 @@ story: <https://blog.nozomi.space/posts/sw2_dock/>.
 | Chip | Patch | Effect |
 | --- | --- | --- |
 | VIA **VL103** (USB-PD controller) | Nintendo SVID, modes and vendor-message replies; the official dock's PD3 identity; 15 V / 2.8 A power offer; version-query replies | Switch 2 enters **TV mode** and docks without the ~3 s pause |
-| Realtek **RTD2142** (DP→HDMI converter) | HDMI AVI InfoFrame marked BT.2020 whenever PQ/HLG HDR metadata is present; refreshed when HDR turns on or off | Intended: **HDR no longer washed out** on the hub's HDMI port. Upstream validated it in a simulator only. On one hub (2026-11-14) HDR from a Mac looked right, but a Switch 2 gave **no HDMI picture** with HDR on or off, so the hub was rolled back to stock; see the system-version table |
+| Realtek **RTD2142** (DP→HDMI converter) | HDMI AVI InfoFrame marked BT.2020 whenever PQ/HLG HDR metadata is present; refreshed when HDR turns on or off | Intended: **HDR no longer washed out** on the hub's HDMI port. Upstream validated it in a simulator only. On one hub (2026-11-14) HDR from a Mac looked right, but a Switch 2 gave **no HDMI picture** with HDR on or off; the same Switch worked on an image without it. Treat it as unproven; see the system-version table |
 
 Not fixed, and things to avoid:
 
@@ -74,7 +74,7 @@ images and refuses anything else:
 | --- | --- | --- | --- |
 | VL103 PD firmware 10.48.3.22 | 32 KiB | `3763c9f3ed64316dc2faeb94dfe14dfb18da4fb1589298740a27979f3737cff3` | `6b5b0eff3e72be89b1b226739face9194f2ec30812b8c1fda5346cae90f4888e` |
 | RTD2142 flash | 2 MiB | `17eea7286255892698066e0b46085dcb5a42855f9797f067041c2ee45104d802` | `f242d130c7a0947f75bc673eb6100160c3cdb8e1d2f5cb9d1a5dca5332a742f1` |
-| RTD2142 flash, SDR-fix candidate (`--sdr-fix`, not yet tested on a hub) | 2 MiB | same | `f191da0f7201fe26c9f9924b11a7f486ce18faa305c145b806cb0f251e518e92` |
+| RTD2142 flash, SDR-fix candidate v2 (`--sdr-fix`, not yet tested on a hub) | 2 MiB | same | `d249fa204f68e8963fe8246578319e1be544fe9a8fe656ecdda5237a8a54a695` |
 
 If your dump has a different hash, your hub has different firmware and these patches
 don't apply. Please don't force them.
@@ -88,6 +88,7 @@ video on many third-party docks, and 23.0.0 added docked VRR. Results recorded s
 | --- | --- | --- |
 | 23.0.1 | VL103 patched (`6b5b0eff…888e`), RTD2142 stock | Works: enters TV mode; docking delay roughly halved (about 1.5 s, judged by eye); HDMI picture good, HDR still somewhat washed out as expected with the RTD2142 stock. Tested with VRR off, no Dock Update, no USB devices on the hub |
 | Same console, 2026-11-14 | VL103 patched, RTD2142 patched (`f242d130…42f1`) | **No HDMI picture** with the Switch's HDR setting on or off: the TV detected a signal but showed nothing. Under investigation; the RTD2142 was flashed back to stock. HDR from a Mac through the same hub looked right |
+| Same console, 2026-11-14 | VL103 patched, RTD2142 SDR-fix candidate v1 (`f191da0f…8e92`, no BT.2020 patch) | **Works in SDR and HDR.** The first connection needed several replugs and SDR/HDR toggles before a picture appeared; after that it stayed stable, and the next replug came up at once in both modes. HDR colours not assessed; this image has no BT.2020 change, so expect the stock look |
 
 Before you accept a console update, check here, and keep your stock dumps so you can
 roll the hub back.
@@ -245,6 +246,12 @@ checked the bus. To restore, write your own stock dumps back the same way
 The `rtd-*` commands take `--bus N` (Linux), `--mac-service N` (macOS), `--chunk
 {16,32,64,128}` and `--no-reset`. Output files are never overwritten. The RTD2142's
 MCU stops video while it is in ISP mode, and the tool resets it afterwards.
+
+`status` and `guide` look for images in the current directory. If a `firmware/`
+directory exists there, they use `firmware/stock/` for dumps and `firmware/patched/`
+for flashable images (each `.bin` with its `.json` manifest), and `status` also lists
+`firmware/*/*.bin`, for example untested builds in `firmware/candidates/`. The
+`firmware/` directory is gitignored.
 
 ## Safety model
 

@@ -55,17 +55,23 @@ All notable changes to this project are documented here. The format follows
   tools: Ghidra projects and exports (`*.gpr`, `*.rep/`, `*.gzf`, lock files), the
   decoded register label tables and the RTD2172 DB's `ReadAll.txt`.
 - RTD2142 **HDR-to-SDR fix candidate** (`rtd2142 --sdr-fix`, `patch_rtd2142_sdr_fix.py`,
-  output `f191da0f…8e92`, not yet tested on a hub). Root cause, read on a live chip:
-  after the source switches from HDR to SDR, the stock firmware keeps the VSC SDP's
-  BT.2020 colorimetry. The source has cleared MSA MISC1 bit 6, so MISC0 should be
-  authoritative (DP 1.4a Table 2-96), but the format check compares only the pixel
-  encoding. The HDMI AVI InfoFrame therefore keeps saying BT.2020 over SDR video, and
-  the TV keeps re-detecting. The candidate makes that check report a change (bank 5
-  `C476` → `FD80`), so the firmware re-captures from MISC0. It also clears the stale
-  HDMI colour depth (5B07) on the 8-bit path (bank 2 `E952` → `FF00`). Hash-locked like
-  the other patches: original hook bytes, erased overlay space and the exact footprint
-  (36 bytes, 4 sectors) are checked. Offline tests use a synthetic image and the real
-  dump, and a simulated flash. `identify` and `rtd-flash` know the image.
+  v2 output `d249fa20…a695`, not yet tested on a hub). Root cause, read on a live chip:
+  in HDR the source carries colorimetry in the VSC SDP (MSA MISC1 bit 6 set) and the
+  stock firmware stores a BT.2020 code in E3E6. Only that path ever writes the code, so
+  after a switch to SDR (MISC1 bit 6 clear, MISC0 = BT.709; DP 1.4a Table 2-96) the HDMI
+  AVI InfoFrame keeps saying BT.2020 over SDR video until the next power-up, and the TV
+  keeps re-detecting.
+  - Bank 5 `C476` → `FD80`: with MISC1 bit 6 clear, clear a leftover code and report a
+    format change, so the firmware rebuilds the output.
+  - Bank 2 `E952` → `FF00`: also clear the stale HDMI colour depth (5B07) on the 8-bit
+    path.
+  - Hash-locked like the other patches: original hook bytes, erased overlay space and
+    the exact footprint (48 bytes) are checked.
+  - Offline tests: a synthetic image, the real dump, and simulated flashes from stock
+    (4 sectors) and from v1 (1 sector).
+  - Candidate v1 (`f191da0f…8e92`) was flashed. Its colour depth fix worked, but its
+    re-capture trigger could not clear the code. `identify` and `rtd-flash` still know
+    it as superseded, so a hub can be moved off it.
 - `rtd-clear-bits ADDR MASK --volatile-ram-write`: clears allow-listed bits (`E362`
   bit 1, `5B07[7:4]`) through the debug interface, for experiments. It never writes
   flash, and unplugging the hub undoes it. The write path (`0x03` sets the data byte,
@@ -79,6 +85,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- README system-version table: a Switch 2 works in SDR and HDR on RTD2142 SDR-fix v1,
+  an image without the BT.2020 change. The first connection needed several replugs and
+  SDR/HDR toggles; after that a replug came up at once. With the BT.2020 patch the same
+  Switch gave no picture, so the README now calls that patch unproven.
+- Optional `firmware/` layout: when `firmware/` exists, `guide` keeps dumps in
+  `firmware/stock/` and patched images in `firmware/patched/` (creating them), and
+  `status` also lists `firmware/*/*.bin` (for example `firmware/candidates/`). The flat
+  layout in the current directory is unchanged otherwise. `status.images()` and
+  `guide.paths()` are new, with tests. `.gitignore` ignores `/firmware/`.
 - README: the RTD2142 BT.2020 patch's effect is no longer stated as fact. Upstream
   validated it in a simulator; on one hub HDR from a Mac looked right, but a Switch 2
   gave no HDMI picture, so the hub was rolled back to stock (recorded in the

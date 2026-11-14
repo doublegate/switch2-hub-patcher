@@ -401,26 +401,43 @@ enable is the only one set):
   (`rtd-clear-bits 5B07 F0`) did not stop the loop, so it is not the main cause, but a
   fresh start has 0 there.
 
-**Fix candidate** (`patch_rtd2142_sdr_fix.py`, `rtd2142 --sdr-fix`, output
-`f191da0f…8e92`, 36 bytes, 4 flash sectors):
+**Candidate v1** (`f191da0f…8e92`, flashed 2026-11-14): the `C476` hook returned
+C = 0 when MISC1 bit 6 was clear and flag `0x2E` was set, plus the `5B07` fix below.
+On the hub the colour depth fix worked on every switch (`5B07` back to `00` in SDR, `60`
+in HDR), but the TV still cycled on some switches, with E3E6 still `6E`. The reason:
+**only `rx2_colorimetry_from_vsc` ever writes E3E6[4:0]**. The MISC0 path
+(`rx2_colorimetry_from_misc0`, `D284`) writes E3E7[6:3], and the other E3E6 writers
+(bank 5 `E938`/`E94F`) touch bits 6:5 only. So a re-capture cannot clear the code;
+only a power-up does. Stable and cycling SDR then read the same in 502 registers, which
+points at the contradictory signalling (an AVI saying BT.2020 with an SDR-gamma HDR
+packet; displays label "BT.2020 + SDR gamma" as HLG:
+<https://discourse.osmc.tv/t/sdr-bt2020-tagged-as-hlg/95144>) rather than the link.
 
-- bank 5 `C476` → `rx2_fmt_check` (`FD80`): if MISC1 bit 6 is clear but `0x2E` is set,
-  return C = 0 ("format changed"); the firmware's own setup (`rx2_stream_setup`,
-  `D7BC`: `dcf4` capture, `a579` apply) then re-captures from MISC0. Otherwise the stock
-  check runs.
+**Candidate v2** (`patch_rtd2142_sdr_fix.py`, `rtd2142 --sdr-fix`, output
+`d249fa20…a695`, 48 bytes; 4 sectors from stock, 1 sector, `0x05F000`, from v1):
+
+- bank 5 `C476` → `rx2_fmt_check` (`FD80`): with MISC1 bit 6 clear, a non-zero
+  E3E6[4:0] can only be left over from the VSC SDP. Clear it (the power-up value) and
+  return C = 0 ("format changed"), so the firmware's own setup (`rx2_stream_setup`,
+  `D7BC`) rebuilds the output from MISC0. After that the condition is false and the
+  stock check runs. No dependency on flag `0x2E`.
 - bank 2 `E952` → `hdmi_deep_color_off` (`FF00`): the stock `5B06 &= FC`, plus
-  `5B07 &= 0F`.
+  `5B07 &= 0F` (unchanged from v1).
 
-Not yet run on a hub. To test: flash it from stock, then switch the Mac HDR → SDR
-several times (expect one brief re-sync, then a stable SDR picture), and test the
-Switch 2 with HDR on and off.
+Not yet run on a hub. To test: flash it (from v1 or stock), switch the Mac HDR → SDR
+several times (expect one brief re-sync, then E3E6 / E0E7 `60`/`80` and a stable SDR
+picture), and test the Switch 2 with HDR on and off.
 
 **The BT.2020 patch (`rtd2142_hdr_avi`) and this bug.** Its AVI rebuild hooks fire only
 when the HDR packet's enable bit changes, but an output restart enables every packet
 at once (`hdmi_pkt_enable_all`, `CDAA`), and the AVI is built before the new HDR
 metadata (`rx_drm_eotf_p1`, `DD9F`) is current. A rework should decide BT.2020 from
 the EOTF on every `hdmi_drm_update` pass. With it flashed, a Switch 2 gave no HDMI
-picture (HDR on or off); not yet explained, and not yet retested on stock.
+picture (HDR on or off). On SDR-fix v1, which has no BT.2020 change, the same Switch 2
+worked in SDR and HDR. The first connection needed several replugs and SDR/HDR toggles,
+then it was stable, and the next replug came up at once. That points at the BT.2020
+overlay (or its interaction with the Switch's signalling) for the no-picture result.
+Not yet explained in the code; the patch should not be used until it is.
 
 ## Sources
 
