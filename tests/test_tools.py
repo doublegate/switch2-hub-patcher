@@ -164,6 +164,18 @@ class StatusTests(unittest.TestCase):
         )
         self.assertIn('install SDCC', status.next_step([(status.FAIL, 'SDCC', 'missing')]))
 
+    def test_images_are_found_flat_and_in_the_firmware_layout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, 'flat.bin').write_bytes(b'\0' * 0x8000)
+            Path(tmp, 'notes.bin').write_bytes(b'\0' * 10)  # wrong size: ignored
+            for sub, size in (('stock', 0x8000), ('candidates', 0x200000)):
+                Path(tmp, 'firmware', sub).mkdir(parents=True)
+                Path(tmp, 'firmware', sub, f'{sub}.bin').write_bytes(b'\0' * size)
+            names = [line.split(':')[0] for line in status.images(tmp)]
+        self.assertEqual(
+            names, ['flat.bin', 'firmware/candidates/candidates.bin', 'firmware/stock/stock.bin']
+        )
+
     def test_report_runs(self):
         lines = []
         code = status.report([(status.OK, 'a', 'b'), (status.FAIL, 'SDCC', 'x')], lines.append)
@@ -223,6 +235,43 @@ class GuideTests(unittest.TestCase):
                 cwd=tmp,
             )
             flash.assert_called_once()
+
+    def test_paths_follow_the_firmware_layout(self):
+        from switch2_hub_patcher import guide
+
+        with tempfile.TemporaryDirectory() as tmp:
+            flat = guide.paths(tmp)
+            self.assertEqual(flat['vl103-stock'], str(Path(tmp, 'vl103-stock.bin')))
+            Path(tmp, 'firmware').mkdir()
+            nested = guide.paths(tmp)
+        self.assertEqual(nested['rtd-stock'], str(Path(tmp, 'firmware/stock/rtd2142-stock.bin')))
+        self.assertEqual(
+            nested['vl103-patched'], str(Path(tmp, 'firmware/patched/vl103-patched.bin'))
+        )
+
+    def test_flash_uses_the_firmware_layout_when_present(self):
+        from switch2_hub_patcher import guide
+
+        rows = [(status.OK, 'SDCC', '')]
+        flash = self.hardware['cmd_vl103_flash']
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(status, 'checks', return_value=rows),
+        ):
+            Path(tmp, 'firmware').mkdir()
+            guide.run(cli, answer=lambda _: 'n', out=lambda _: None, cwd=tmp)  # creates dirs
+            for sub, name in (('stock', 'vl103-stock.bin'), ('patched', 'vl103-patched.bin')):
+                Path(tmp, 'firmware', sub, name).write_bytes(b'')
+            guide.run(
+                cli,
+                answer=lambda p: 'flash vl103' if 'VL103' in p else 'n',
+                out=lambda _: None,
+                cwd=tmp,
+            )
+        flash.assert_called_once()
+        args = flash.call_args.args[0]
+        self.assertTrue(args.target.endswith('firmware/patched/vl103-patched.bin'))
+        self.assertTrue(args.base.endswith('firmware/stock/vl103-stock.bin'))
 
     def test_stops_on_fail(self):
         from switch2_hub_patcher import guide

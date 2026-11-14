@@ -1,5 +1,8 @@
 # Firmware: dumps, patched images and their manifests are vendor property and
 # never belong in the repository. Report hashes instead.
+# Local layout (status and guide use it when present): firmware/stock/ (dumps),
+# firmware/patched/ (flashable images + manifests), firmware/candidates/ (untested builds).
+/firmware/
 *.bin
 *.img
 *.rom

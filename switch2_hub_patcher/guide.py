@@ -1,7 +1,9 @@
 """Interactive walk-through: check, dump, patch, flash, each step confirmed.
 
-Works in the current directory with the standard file names. Every action is one
-of the regular commands, so the guide adds no new way to touch the hardware.
+Works in the current directory with the standard file names, or, when a firmware/
+directory exists there, with firmware/stock/ and firmware/patched/ (see paths()).
+Every action is one of the regular commands, so the guide adds no new way to touch the
+hardware.
 """
 
 import argparse
@@ -16,6 +18,21 @@ FILES = {
     'rtd-stock': 'rtd2142-stock.bin',
     'rtd-patched': 'rtd2142-patched.bin',
 }
+# Optional layout: when <cwd>/firmware exists, stock dumps go to firmware/stock/ and
+# patched images to firmware/patched/ (candidates are kept in firmware/candidates/).
+FIRMWARE_DIR = 'firmware'
+SUBDIRS = {'vl103-stock': 'stock', 'rtd-stock': 'stock'}
+
+
+def paths(cwd='.'):
+    """Standard file paths, in the firmware/ layout when that directory exists."""
+    here = Path(cwd)
+    if (here / FIRMWARE_DIR).is_dir():
+        return {
+            key: str(here / FIRMWARE_DIR / SUBDIRS.get(key, 'patched') / name)
+            for key, name in FILES.items()
+        }
+    return {key: str(here / name) for key, name in FILES.items()}
 
 
 def ask(prompt, answer=None, expect='y'):
@@ -62,8 +79,9 @@ def transport_args(out=print):
 
 
 def run(cli, answer=None, out=print, cwd='.'):
-    here = Path(cwd)
-    path = {k: str(here / v) for k, v in FILES.items()}
+    path = paths(cwd)
+    for target in path.values():
+        Path(target).parent.mkdir(parents=True, exist_ok=True)
     rows = status.checks(cwd)
     if status.report(rows, out):
         out('fix the FAIL items first')

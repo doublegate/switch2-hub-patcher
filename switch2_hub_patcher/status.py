@@ -134,15 +134,23 @@ def checks(cwd='.'):
         (OK if hub else INFO, 'VIA VL817 hub on USB', 'present' if hub else 'not connected')
     )
 
-    images = []
-    for path in sorted(Path(cwd).glob('*.bin')):
+    found = images(cwd)
+    rows.append((INFO, 'images here', '; '.join(found) or 'no 32 KiB / 2 MiB *.bin files'))
+    return rows
+
+
+def images(cwd='.'):
+    """'name: identity' for 32 KiB / 2 MiB *.bin files in cwd and in cwd/firmware/*/."""
+    here = Path(cwd)
+    found = []
+    for path in sorted(here.glob('*.bin')) + sorted(here.glob('firmware/*/*.bin')):
         try:
             if path.stat().st_size in pipeline.SIZES:
-                images.append(f'{path.name}: {pipeline.identify(path.read_bytes())}')
+                name = path.relative_to(here).as_posix()
+                found.append(f'{name}: {pipeline.identify(path.read_bytes())}')
         except OSError:
             continue
-    rows.append((INFO, 'images here', '; '.join(images) or 'no 32 KiB / 2 MiB *.bin files'))
-    return rows
+    return found
 
 
 def next_step(rows):
