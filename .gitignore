@@ -2,7 +2,9 @@
 # never belong in the repository. Report hashes instead.
 # Local layout (status and guide use it when present): firmware/stock/ (dumps),
 # firmware/patched/ (flashable images + manifests), firmware/candidates/ (untested builds).
-/firmware/
+# Only firmware/README.md (the layout description) is tracked.
+/firmware/*
+!/firmware/README.md
 *.bin
 *.img
 *.rom
