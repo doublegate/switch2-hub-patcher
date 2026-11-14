@@ -172,9 +172,12 @@ With the full RTD2172 register database applied to every bank (see section 4):
   bit 6) is either a hardware default or written through a computed address. In an
   MST topology the last branch device must set this bit itself for the source to
   use Adaptive-Sync, so it is required, not optional.
-- **Open: which receiver stream carries the hub's input.** Stream 1's code is in
-  bank 6, stream 2's in bank 5 and stream 4's in bank 4. A live read of
-  `DPF_CTRL_0` for each stream (`rtd-peek B130 B330 B530 B830`) answers it.
+- **Answered live (2026-11-14): stream 2 carries the hub's input.** `rtd-peek B130
+  B330 B530 B830` reads `00 80 00 00`: only stream 2's display enable is set, with
+  the mode bits clear (full-last-line). Its code is in bank 5 and mirrors stream 1:
+  `dprx2_program_dpf_timing` (bank 5 `92F2`, called from `rx2_stream_setup` at
+  `D7EC`) clears `disp_en` at `931F` and selects full-last-line at **`94CC`**
+  (`B330 &= 0x4F`). The VRR hook belongs there, not at bank 6 `A0BC`.
 
 So "VRR on" for the DP port is, in order: advertise `MSA_TIMING_PAR_IGNORED`; while
 the source sends Adaptive-Sync SDPs, set `vsc_for_vrr_en`, `deonly_mode` and
@@ -265,8 +268,8 @@ stable; and keep the DP TX timing in step (its MSA comes from the same
 
 Upstream used a firmware debug interface at I²C address **0x35** (8-bit `0x6A`),
 reached over the same DP AUX channel as the ISP at `0x4A`, to read and write live
-registers. Its protocol is not published. Decoded from the stock dump; **not yet
-tested on the chip**:
+registers. Its protocol is not published. Decoded from the stock dump and **confirmed on
+a chip on 2026-11-14** (reads, and single-byte writes through `rtd-clear-bits`):
 
 - **Setup:** `dbg_i2c_slave_init` (bank 0 `E674`) writes `0x6A` to the slave-address
   register `FF23` and enables external interrupt 1.
@@ -307,9 +310,19 @@ First live run, with the hub connected and nothing else using it:
 switch2-hub-patcher rtd-peek FF23 B130 B330 B530 B830 B19A B2FC
 ```
 
-Unknown: whether the main loop keeps the video running while in debug mode (it
-should, the commands are serviced from the main loop), and whether the undecoded
-gate in `dbg_service` (a check through `2074` before dispatch) rejects some requests.
+On the chip: the self-check reads `FF23 = 0x6A`, about 150 registers take 4.6 s,
+a loop over six registers samples about 6 times a second, and the picture keeps
+running. While the firmware restarts the output (a mode switch), some
+replies are stale (the previous byte repeated); steady-state reads agree across runs.
+
+**`rtd-clear-bits ADDR MASK --volatile-ram-write`** is the only write: it clears
+allow-listed bits (`rtddbg.CLEARABLE`: `E362` bit 1 and `5B07[7:4]`) with
+`[0x01, hi]`, `[0x03, value]`, `[0x3B, lo]`, reading before and after. The `0x03`
+(low nibble 3 → `E28E`) and `0x3B` handlers were re-checked in the dispatch table
+before the first write. It never touches flash; unplugging the hub restores RAM.
+
+Still unknown: the undecoded gate in `dbg_service` (a check through `2074` before
+dispatch); it has not rejected any request so far.
 
 ## 4. Tools: Ghidra and the symbol map
 
@@ -339,6 +352,75 @@ $G proj rtd -process bank2.bin -noanalysis -scriptPath research/ghidra \
   lists their callers; `Listing.java` prints raw disassembly for address ranges.
 - Keep bank images and Ghidra projects outside the repository: they contain vendor
   code. The scripts and the symbol map contain addresses and names only.
+
+## 5. HDR to SDR: the re-detect loop (stock firmware, 2026-11-14)
+
+**Symptom.** Mac (Apple silicon, macOS) → hub → HDMI TV, stock RTD2142. Switching the
+Mac from HDR to SDR while connected often leaves the TV cycling between SDR, HDR and
+HLG; switching back and forth or replugging the hub ends it. Mac → TV directly over
+HDMI is solid in both modes. With the BT.2020 patch the same happens. A fresh plug-in
+straight into SDR is stable.
+
+**What the Mac sends (from its IORegistry, `dispext0` colour modes).** HDR: 4K60
+YCbCr 4:2:2 12-bit BT.2020 PQ, colorimetry in the VSC SDP (MSA MISC1 bit 6 set). SDR:
+4K60 YCbCr 4:4:4 8-bit BT.709 in MSA MISC0 (MISC1 bit 6 clear). Both are 594 MHz on
+HDMI. In SDR the Mac keeps sending an all-zero HDR metadata SDP (EOTF 0); the hub
+forwards it, but that is the same in the stable and the cycling state, so it is not
+the cause. (CTA-861-H wants a source to send that zero packet for 2 s and then stop:
+<https://ratatoskr.run/intel-gfx/2026/09/17491615/t>.)
+
+**Live reads, cycling vs stable SDR** (stream 2 is the hub's input: `B330` display
+enable is the only one set):
+
+| Register | Cycling | Stable | Meaning |
+| --- | --- | --- | --- |
+| `B403` MISC1 | `00` | `00` | bit 6 clear: MISC0 is authoritative (DP 1.4a Table 2-96) |
+| `B402` MISC0 | `3C` | `3C` | 8-bit YCbCr 4:4:4, BT.709, CTA range |
+| `B446`/`B447` VSC | `27`/`83` | (not read) | the last HDR VSC SDP: 4:2:2, BT.2020, 12-bit |
+| `DE12` `rx2_fmt_colorimetry` | `7E` | | `[7:4]` = 7 kept from the VSC SDP |
+| `E3E6` `rx2_colorimetry_code` | `6E` | | code `0E` = BT.2020 YCbCr |
+| `E0E7` `hdmi_in_colorimetry_q` | `8E` | `80` | the HDMI side's copy (field 8) |
+| `5B07` HDMI `dp_color_depth` | `60` | `00` | 12-bit depth left over |
+| `E09D` | `D0` | `00` | not decoded |
+
+**Mechanism.**
+
+- `rx2_capture_format` (bank 5 `DCF4`) takes the VSC path when MISC1 bit 6 is set
+  (sets flag bit `0x2E`, stores the VSC colorimetry in `DE12[7:4]` via `5027`), and the
+  MISC0 path otherwise (clears `0x2E`; `508d` updates only `DE12[3:0]`).
+- `rx2_colorimetry_from_vsc` (`C37B`) turns YCbCr + `DE12[7:4]` into code 7 + n:
+  BT.2020 YCbCr (7) becomes `0x0E`. The HDMI AVI builder (bank 2, `7E17` switch, case
+  `7E87`) maps `0x0E` to C = 3, EC = 6: BT.2020.
+- During the HDR → SDR switch the format is captured while MISC1 bit 6 is still set.
+  Afterwards `rx2_format_matches_q` (`C476`, polled through the stream-good check
+  `EF1A`) compares only the pixel encoding when bit 6 is clear (4:4:4 both times), so
+  it never reports a change and nothing re-captures. The AVI keeps saying BT.2020 YCbCr
+  over BT.709 video while the HDR metadata says SDR gamma; the TV keeps re-detecting.
+- Separately, `hdmi_set_deep_color` (bank 2 `E8FF`) writes `5B07[7:4]` only for 10/12-bit
+  input; its 8-bit branch (`E952`) never clears it. Clearing it live
+  (`rtd-clear-bits 5B07 F0`) did not stop the loop, so it is not the main cause, but a
+  fresh start has 0 there.
+
+**Fix candidate** (`patch_rtd2142_sdr_fix.py`, `rtd2142 --sdr-fix`, output
+`f191da0f…8e92`, 36 bytes, 4 flash sectors):
+
+- bank 5 `C476` → `rx2_fmt_check` (`FD80`): if MISC1 bit 6 is clear but `0x2E` is set,
+  return C = 0 ("format changed"); the firmware's own setup (`rx2_stream_setup`,
+  `D7BC`: `dcf4` capture, `a579` apply) then re-captures from MISC0. Otherwise the stock
+  check runs.
+- bank 2 `E952` → `hdmi_deep_color_off` (`FF00`): the stock `5B06 &= FC`, plus
+  `5B07 &= 0F`.
+
+Not yet run on a hub. To test: flash it from stock, then switch the Mac HDR → SDR
+several times (expect one brief re-sync, then a stable SDR picture), and test the
+Switch 2 with HDR on and off.
+
+**The BT.2020 patch (`rtd2142_hdr_avi`) and this bug.** Its AVI rebuild hooks fire only
+when the HDR packet's enable bit changes, but an output restart enables every packet
+at once (`hdmi_pkt_enable_all`, `CDAA`), and the AVI is built before the new HDR
+metadata (`rx_drm_eotf_p1`, `DD9F`) is current. A rework should decide BT.2020 from
+the EOTF on every `hdmi_drm_update` pass. With it flashed, a Switch 2 gave no HDMI
+picture (HDR on or off); not yet explained, and not yet retested on stock.
 
 ## Sources
 

@@ -109,3 +109,80 @@
 0	CODE	8bcc	dpcd_b7d0_bit1_clear_q	B7D0 bit 1 = 0; EA = 1
 3	CODE	8901	dpcd_set_addr	B7C1..B7C3 = R7, R5, R3
 5	CODE	fbd8	dpcd_set_addr	B7C1..B7C3 = R7, R5, R3
+#
+# --- debug command handlers (bank 0; switch table after the c51_ccase call at 2C5C) ---
+0	CODE	2c5f	dbg_cmd_table	Keil ?C?CCASE table: 2F exit, 3A read, 3B write, 41/44/45, 7A, 80, BA, BB, C9, CA
+0	CODE	2ce9	dbg_cmd_exit	0x2F
+0	CODE	2d11	dbg_cmd_read	0x3A: FF26 = XDATA[E28D:E28C] (confirmed on hardware 2026-11-14)
+0	CODE	2d24	dbg_cmd_write	0x3B: XDATA[E28D:E28C] = E28E
+0	CODE	2da9	dbg_set_addr_hi	default handler, low nibble 1/2: E28D = data
+0	CODE	2db1	dbg_set_wdata	default handler, low nibble 3/6: E28E = data
+0	CODE	2dbb	dbg_set_autoinc	default handler, low nibble 5: E28F = data
+#
+# --- DP RX HDR metadata capture (bank 1) and per-port status ---
+1	CODE	b7c2	rx_hdr_sdp_capture_q	per port: copy the received HDR metadata SDP into a cache, update the E35D+5*port status
+*	CODE	434b	rx_hdr_status_at_dptr	A = @DPTR, then rx_hdr_status_ptr
+*	CODE	434c	rx_hdr_status_ptr	DPTR = E35D + 5*(A & 3); A = @DPTR
+*	EXTMEM	e35d	rx_hdr_status_p0	port 0 HDR status
+*	EXTMEM	e362	rx_hdr_status_p1	port 1 (the hub's input): bit1 metadata present, bit3 new metadata (acked by hdmi_drm_update)
+*	EXTMEM	e367	rx_hdr_status_p2
+*	EXTMEM	e36c	rx_hdr_status_p3
+*	EXTMEM	dd9d	rx_drm_cache_p1	port 1 HDR metadata cache: DD9D version, DD9E length, DD9F.. payload
+*	EXTMEM	dd9f	rx_drm_eotf_p1	PB1: EOTF (0 SDR gamma, 2 PQ, 3 HLG); stays latched (0) after the source leaves HDR
+*	EXTMEM	de55	rx_drm_cache_p0
+#
+# --- HDMI TX packet engine (bank 2, 5Bxx) ---
+2	CODE	f2e6	hdmi_drm_update	polled: metadata absent -> HDR packet off; new -> rebuild (slot 2A) and re-enable; else keep on
+2	CODE	f31f	hdmi_drm_enable	tail of hdmi_drm_update: 5B6B bit5 (pr_spkt3_en) = 1 (BT.2020 patch hook)
+2	CODE	f326	hdmi_drm_disable	tail of hdmi_drm_update: 5B6B bit5 = 0 (BT.2020 patch hook)
+2	CODE	f36f	hdmi_pkt_build	R5 selects the builder (0 AVI, 3 HDR/DRM, ...), R7 the packet SRAM address (5B6D); then commits
+2	CODE	f390	hdmi_pkt_build_avi_call	lcall hdmi_build_avi (BT.2020 patch hook)
+2	CODE	b9f6	hdmi_build_avi	AVI InfoFrame into the CCFF buffer, then into the once-packet registers 5B44..
+2	CODE	994c	hdmi_build_drm	HDR (DRM, type 87h) InfoFrame from the port's metadata cache
+2	CODE	f8d5	hdmi_pkt_commit	5B6C bit7 (write packet SRAM), wait for done (bit4); C = 1 on success
+2	CODE	4ae7	hdmi_drm_en_read	DPTR = 5B6B; A = 5B6B & ~0x20
+2	CODE	4733	hdmi_once_pkt_hb_set	5B46 = A; DPTR = 5B45
+2	CODE	47f7	hdmi_once_pkt_clear_word	clears 5B48 + R7
+2	CODE	4b02	hdmi_pkt_slot1_disable	5B6B bit3 = 0
+2	CODE	cd0c	hdmi_output_start_packets_q	output (re)start: AVI (slot 0) first, ..., then hdmi_pkt_enable_all
+2	CODE	cdaa	hdmi_pkt_enable_all	5B6B |= 0xFC: every packet slot on, the HDR one included
+2	CODE	fe9b	hdmi_service_tail_q	9B12, ECCB, then tail-jumps to hdmi_drm_update
+*	EXTMEM	ccfd	hdmi_cur_port_q	port index used by the packet builders
+*	EXTMEM	ccff	hdmi_pkt_buf	staged packet: CCFF version, CD00 length, CD01 checksum, CD02.. payload
+#
+# --- HDMI TX deep colour (bank 2): stock bug, 5B07 colour depth survives a 12-bit -> 8-bit switch ---
+2	CODE	e8ff	hdmi_set_deep_color	bpc = E0E6>>3; != 8: 5B06 |= 2, 5B07[7:4] = bpc/2; == 8 (E952): 5B06 &= FC only, 5B07 never cleared
+2	CODE	e952	hdmi_deep_color_off	8-bit branch of hdmi_set_deep_color (the fix hooks here)
+2	CODE	410c	hdmi_get_in_bpc	A = E0E6 >> 3 (bits per colour)
+2	CODE	4594	set_hi_nibble_next	A &= F0; INC DPTR; @DPTR = (@DPTR & 0F) | A
+2	CODE	4597	set_hi_nibble	@DPTR = (@DPTR & 0F) | A
+2	CODE	47e9	set_bit0_at_dptr
+2	CODE	4af5	set_bit3_at_dptr
+*	EXTMEM	e0e6	hdmi_in_fmt	[7:3] input bits per colour (8, 10, 12)
+*	EXTMEM	e0e7	hdmi_in_colorimetry_q	[4:0] colorimetry code from the RX format query (field 8), [6:5] field 7; keeps 0E after HDR -> SDR
+*	EXTMEM	e09d	hdmi_hdr_state_q	D0 after an HDR session, 00 after a fresh start in SDR
+#
+# --- DP RX stream 2 (the hub's input) format and colorimetry, bank 5 ---
+5	CODE	dcf4	rx2_capture_format	MISC1 (B403) bit6 set: VSC path (B446.., sets flag 0x2E); else MISC0 (B402) path; fills DE11..DE13
+5	CODE	5027	rx2_fmt_set_vsc_colorimetry	DE12[7:4] = A[3:0] (VSC colorimetry)
+5	CODE	508d	rx2_fmt_set_misc0	DE12[3:0] = MISC0[4:1]; keeps DE12[7:4], so the VSC colorimetry survives HDR -> SDR
+5	CODE	50ef	rx2_fmt_set_bpc_q	DE13[4:3] from MISC0/VSC
+5	CODE	5294	rx2_misc1_fmt_q	A & 6 combined with MISC1 (B403)
+5	CODE	a579	rx2_apply_format	flag 0x2E (VSC) set: encoding from DE11, then rx2_colorimetry_from_vsc
+5	CODE	b991	rx2_vsc_colorimetry_changed_q	updates DE12[7:4] from CCFE and calls rx2_colorimetry_from_vsc without checking flag 0x2E
+5	CODE	c37b	rx2_colorimetry_from_vsc	YCbCr: E3E6[3:0] = 7 + DE12[7:4] (BT.2020 YCbCr -> 0x0E); RGB: DE12[7:4] table
+5	CODE	4e20	rx2_colorimetry_code_ptr	DPTR = E3E6; A = E3E6 & 0xE0
+5	CODE	c476	rx2_format_matches_q	compares the live MISC0/MISC1 with the cached format
+*	EXTMEM	de11	rx2_fmt_encoding	pixel encoding (from VSC or MISC)
+*	EXTMEM	de12	rx2_fmt_colorimetry	[7:4] VSC colorimetry (stale after HDR -> SDR), [3:0] MISC0[4:1]
+*	EXTMEM	de13	rx2_fmt_bpc_q
+*	EXTMEM	e3e6	rx2_colorimetry_code	[3:0] code 0..14 read by the HDMI side as field 8 (E0E7[4:0]); 0x0E = BT.2020 YCbCr
+1	CODE	ea5e	rx_get_format_field	bank call target of 1480: R7 port, R5 field; dispatches on the input type
+2	CODE	1480	call_rx_get_format_field	-> bank 1 EA5E
+5	CODE	d7bc	rx2_stream_setup	port 1: link checks, rx2_capture_format, rx2_apply_format, ..., dprx2_program_dpf_timing
+5	CODE	ef1a	rx2_stream_good_q	polled via the 17FD trampoline: f6d7, e004, rx2_format_matches_q, ea86, f332; C = 1 when unchanged
+5	CODE	92f2	dprx2_program_dpf_timing	stream 2 copy of bank 6 9EDA (the live stream): disp_en off at 931F, full-last-line at 94CC
+5	CODE	94cc	dprx2_select_full_last_line	B330 &= 0x4F (the stream-2 VRR hook point)
+5	CODE	fd80	rx2_fmt_check	SDR-fix candidate overlay (not stock)
+2	CODE	ff00	hdmi_deep_color_off_fix	SDR-fix candidate overlay (not stock)
+*	CODE	17fd	call_b5_rx2_stream_good	-> bank 5 EF1A
