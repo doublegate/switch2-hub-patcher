@@ -72,6 +72,18 @@ images and refuses anything else:
 If your dump has a different hash, your hub has different firmware and these patches
 don't apply. Please don't force them.
 
+### Switch 2 system versions
+
+Nintendo's console updates can change how the Switch 2 treats a dock: 21.0.0 stopped
+video on many third-party docks, and 23.0.0 added docked VRR. Results recorded so far:
+
+| System version | Hub state | Result |
+| --- | --- | --- |
+| 23.0.1 | VL103 patched (`6b5b0eff…888e`), RTD2142 stock | Flashed and read back on Linux; docking test pending |
+
+Before you accept a console update, check here, and keep your stock dumps so you can
+roll the hub back.
+
 ## Requirements
 
 - **Python ≥ 3.9**, standard library only. Patching works on any OS.
