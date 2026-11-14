@@ -330,6 +330,22 @@ check "an oversized review round is capped" "yes" \
   "$([ "$(wc -c < "$TMPD/round")" -le 1000 ] && echo yes || echo no)"
 check "a capped review round says it was truncated" "yes" \
   "$(grep -q 'Review truncated' "$TMPD/round" && echo yes || echo no)"
+# --- UTF-8 scrub: one helper for the prompt AND the review output, executed -------
+# The review-output path once had iconv only while the prompt path also fell back to python3
+# (agy review, switch2-hub-patcher PR #1). Both now call agy_scrub_utf8; exercise each sanitizer.
+printf 'abc\xe2\x82' > "$TMPD/split"          # a euro sign cut after two of its three bytes
+agy_scrub_utf8 "$TMPD/split"
+check "a split UTF-8 sequence is scrubbed" "abc" "$(cat "$TMPD/split")"
+mkdir -p "$TMPD/noiconv"
+for t in python3 mv rm; do ln -sf "$(command -v "$t")" "$TMPD/noiconv/$t"; done
+printf 'abc\xe2\x82' > "$TMPD/split"
+( PATH="$TMPD/noiconv"; agy_scrub_utf8 "$TMPD/split" )
+check "the python3 fallback scrubs when iconv is absent" "abc" "$(cat "$TMPD/split")"
+printf '\xe2\x82' > "$TMPD/allbad"            # no valid byte: every sanitizer yields nothing
+agy_scrub_utf8 "$TMPD/allbad"
+check "a sanitizer's empty result never replaces the file" "2" "$(wc -c < "$TMPD/allbad" | tr -d ' ')"
+check "both byte-cap paths call the shared scrub" "2" \
+  "$(grep -c '^ *agy_scrub_utf8 "\$' "$SCRIPT_DIR/agy-review.sh")"
 # A failed jq step in the archive lookup must be logged, not swallowed.
 check "archive jq failures are logged" "no" \
   "$(grep -n 'SELECT_OURS_JQ" 2>/dev/null' "$SCRIPT_DIR/agy-review.sh" >/dev/null && echo yes || echo no)"

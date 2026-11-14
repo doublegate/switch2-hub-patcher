@@ -38,7 +38,7 @@ is why this uses a self-hosted runner rather than GitHub's cloud runners.
 GitHub PR event ──▶ self-hosted runner (YOUR machine, systemd --user)
                       │  gh pr diff ─▶ build adversarial-reviewer prompt (+ style guide)
                       │  agy --print  (PTY-wrapped, OAuth/Ultra)  ─▶ review text
-                      └─ gh pr comment ─▶ posted back on the PR (prior bot comment replaced)
+                      └─ gh api ─▶ one comment per PR, edited in place (earlier rounds archived)
 ```
 
 Files in this template:
@@ -48,14 +48,23 @@ Files in this template:
 | `.github/workflows/antigravity-review.yml` | **copy → target repo** | trigger + job definition |
 | `scripts/agy-review.sh` | **copy → target repo** | the reviewer (diff → prompt → `agy` → comment) |
 | `scripts/_agy_print.sh` | **copy → target repo** | PTY fallback helper (only if `unbuffer` is absent) |
+| `scripts/_agy_comment_body.sh` | **copy → target repo** | comment-body and archive format; `agy-review.sh` sources it unconditionally |
+| `scripts/agy-review-selftest.sh` | **copy → target repo** | offline self-test of the reviewer; run it in the target's CI |
+| `.github/actionlint.yaml` | **copy → target repo** (only if absent) | declares the self-hosted `agy` label for actionlint |
+| `README.md` (this file) | **copy → `.github/AGY-REVIEWER.md`** | operations doc: setup, troubleshooting, security model |
 | `agy-review.md.example` | **copy → `.github/agy-review.md`** in target repo | the review style guide (optional) |
+| `scripts/provision-runner.sh`, `scripts/deprovision-runner.sh` | template-local | stand up and tear down a per-repo runner |
 | `systemd/github-agy-runner@.service` | `~/.config/systemd/user/` | runs each runner in your session (template-local) |
 | `gitignore.snippet` | *optional append* | precautionary ignores (see below) — never copied over an existing `.gitignore` |
 | `.gitignore` | template-local | this repo's own hygiene — **do not** copy into target repos |
 
-> **Copy into a target repo:** only the workflow, the `scripts/` dir, and
-> optionally `.github/agy-review.md`. Everything else (`systemd/`, `.gitignore`,
-> `*.example`, this README, `gitignore.snippet`) stays here.
+> **Copy into a target repo** (what `install-into-repo.sh` does): the workflow, the four
+> scripts `agy-review.sh`, `_agy_print.sh`, `_agy_comment_body.sh` and
+> `agy-review-selftest.sh`, this README as `.github/AGY-REVIEWER.md`,
+> `.github/actionlint.yaml` when the target has none, optionally `.github/agy-review.md`,
+> and one appended `.gitignore` line (`/.agy-review-work/`). Everything else
+> (`systemd/`, the provision/deprovision scripts, this repo's `.gitignore`, `*.example`,
+> `gitignore.snippet`) stays here.
 
 ---
 
