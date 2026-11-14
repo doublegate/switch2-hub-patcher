@@ -120,17 +120,59 @@ the timing.
   generic InfoFrame slot is the realistic option. It is unknown which signal the
   official dock uses.
 
-### Hardware-day experiment (read/poke only, with a stock dump saved first)
+### What the official dock does differently (findings, 2026-11-14)
 
-1. `survey`: find who writes `B130`/`B19A`/`B2FC` (and the ST2–4 copies) and the
-   DPCD 0x0007 bit 6 that the hub advertises upstream.
-2. In the main loop, find the timing-stable state (where it writes
+- **The fix is RTD2142 firmware, not VL103.** The console side already works: the
+  VL103 version replies make the Switch offer VRR and send variable timing. Both
+  failures (DP freeze/black on varying frame rate, HDMI stuck at 60 Hz) are in the
+  converter: the DPF cannot follow a variable vblank, and the HDMI TX never sends
+  a VRR packet.
+- **The official dock's converter is a different, HDMI 2.1-class part.** Switchbrew
+  lists its DP-to-HDMI converter as a Realtek **RTD2175N**, and press coverage of
+  the pre-23.0.0 limitation describes it as a DP 1.4 to HDMI 2.1 converter.
+  Third-party tests found the official dock already passes VRR to a TV when a PC
+  or another handheld is the source. So the official "Dock Update" mostly unlocks
+  a capability that converter already had. The RTD2142 is a lower-tier converter
+  with an HDMI 2.0 TX, and whether it can follow variable timing at all is unproven.
+- **Live register access is the missing tool.** Upstream read and wrote live RTD2142
+  registers through a firmware debug interface at I²C address **0x35** over the
+  same AUX channel, without flashing. Its protocol is not published, and this
+  repository's `rtdisp.py` implements only the ISP interface at 0x4A. Recovering it
+  from a stock dump turns the VRR work into volatile register pokes that a power
+  cycle undoes, instead of flash-and-test iterations.
+- **Value is limited.** At 23.0.0 only *Welcome Tour* 1.1.0 used docked VRR.
+- **Do not suppress VRR from the VL103 side.** Replaying an older dock version to
+  stop the console offering VRR risks a Dock Update prompt, and the patched hub has
+  no update handler. A safer interim change, if wanted, is an RTD2142 patch that
+  hides the TV's VRR capability (EDID range / DPCD 0x0007 bit 6) from the console,
+  so it never offers VRR. That is simpler than VRR itself but needs the same
+  RTD2142 access.
+
+### Order of work
+
+1. **Reach the RTD2142.** It is flashed over the hub's DP input, not USB. A desktop
+   whose only display source is an NVIDIA card on the proprietary driver (no USB-C
+   DP alt mode, no `drm_dp_aux`) cannot reach it; `find-aux` reports no Realtek
+   branch. Use a Linux laptop with an Intel/AMD iGPU and a USB-C DP-alt-mode port,
+   macOS (untested on this chip), or a SOIC-8 clip. Run `rtd-probe`, then `rtd-dump`.
+2. **Land the shipped RTD2142 HDR step first.** It is the same chip and write path,
+   and it confirms the still-provisional `rtd2142_hdr_avi` SDCC 4.6.0 digest.
+3. **`survey` the stock dump:** find who writes `B130`/`B19A`/`B2FC` (and the ST2–4
+   copies) and the DPCD 0x0007 bit 6 that the hub advertises upstream.
+4. **Recover the 0x35 debug interface** from the dump and add a read-only
+   `rtd-peek` command (test it against `tests/fake_rtd.py`); add writes only once
+   reads are trusted.
+5. **Find the timing-stable state** in the main loop (where it writes
    `deonly_full_mode` or leaves frame-sync). That is the hook for "VRR on".
-3. Build a candidate that sets `deonly_mode|vrr_mode` and `vsc_for_vrr_en` only
-   when the received stream carries Adaptive-Sync SDPs. Test DP-port VRR first,
+6. **Poke, then build.** Set `deonly_mode|vrr_mode` and `vsc_for_vrr_en` live, only
+   while the received stream carries Adaptive-Sync SDPs. Test DP-port VRR first,
    using *Welcome Tour* 1.1.0 with VRR on and a monitor with a refresh-rate OSD.
-4. Watch for the upstream failure (black screen when the frame rate varies) and
-   recover by power cycling. Keep the SOIC-8 clip ready.
+   Watch for the upstream failure (black screen when the frame rate varies) and
+   recover by power cycling.
+7. **Only if DP-port VRR holds,** write a hash-guarded builder as a new RTD2142 step
+   and test it with the SOIC-8 clip ready. Then try the HDMI FreeSync VSIF
+   (OUI 00001A) through a generic InfoFrame slot, on a TV that accepts FreeSync
+   over HDMI.
 
 ## Sources
 
@@ -142,4 +184,11 @@ the timing.
   <https://lkml.iu.edu/2605.2/04577.html>
 - Switch 2 23.0.0 docked VRR + dock update:
   <https://www.thesixthaxis.com/2026/09/10/nintendo-switch-2-finally-gets-docked-vrr-with-system-update-23-0-0/>,
-  <https://tech-insider.org/nintendo-switch-2-docked-vrr-update-23-2026/>
+  <https://tech-insider.org/nintendo-switch-2-docked-vrr-update-23-2026/>,
+  <https://videocardz.com/newz/nintendo-switch-2-update-23-0-0-adds-docked-vrr-and-full-system-transfers>
+- Official dock converter and pre-23.0.0 VRR limitation:
+  <https://switchbrew.org/wiki/Switch_2:_Dock>,
+  <https://www.tweaktown.com/news/105278/switch-2-does-not-support-vrr-while-docked-nintendo-confirms/index.html>,
+  <https://www.notebookcheck.net/Nintendo-Switch-2-VRR-support-could-be-in-the-works.1339818.0.html>
+- Docked VRR at launch limited to one title:
+  <https://shattered.io/switch-2-firmware-23-0-0-vrr-update-2026/>

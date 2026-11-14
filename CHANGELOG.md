@@ -13,6 +13,10 @@ All notable changes to this project are documented here. The format follows
   `.githooks/check-home-paths` script.
 - README "Switch 2 system versions" table recording which console versions the patched
   hub has been checked on (first entry: 23.0.1, VL103 patched, docking test pending).
+- `research/DP_HDR_AND_VRR.md`: what the official dock does differently for VRR (an
+  HDMI 2.1-class RTD2175N converter that already passes VRR from other sources), why the
+  fix is RTD2142 firmware rather than VL103, the missing live-register tool (the 0x35
+  debug interface), and an ordered work plan starting from RTD2142 access.
 
 ### Changed
 
