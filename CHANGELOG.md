@@ -25,6 +25,9 @@ All notable changes to this project are documented here. The format follows
 - CI pins `markdownlint-cli2` 0.24.0 (was 0.18.1). The old pin predated rule MD060, so a
   newer local binary reported 32 table findings that CI never gated; the five affected
   table separator rows in `README.md` and `research/DP_HDR_AND_VRR.md` are now spaced.
+- The SDCC 4.6.0 VL103 overlay digests are confirmed rather than provisional: a real stock
+  VL103 dump (`3763c9f3…cff3`) passed the six-step pipeline with SDCC 4.6.0 and produced
+  the hardware-tested image `6b5b0eff…888e`. The RTD2142 overlay is still provisional.
 
 ### Fixed
 

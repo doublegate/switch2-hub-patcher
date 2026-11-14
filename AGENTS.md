@@ -36,7 +36,7 @@
 ### Gotchas / institutional knowledge
 
 - Supported images are exactly the four hashes in the README table. Never loosen the hash checks to accept other dumps.
-- `OVERLAY_DIGESTS_SDCC_4_6_0` in `pipeline.py` is provisional until a real dump passes the pipeline with SDCC 4.6.0.
+- `OVERLAY_DIGESTS_SDCC_4_6_0` in `pipeline.py`: the five VL103 entries are confirmed (a real stock VL103 dump passed the pipeline with SDCC 4.6.0 on 2026-11-14 and produced `6b5b0eff…888e`); `rtd2142_hdr_avi` stays provisional until a real RTD2142 dump does the same.
 - macOS IOAVService I2C semantics (offset handling, transfer size) are assumptions until a hub is attached; `rtd-flash` writes only after a full same-session read matches the base hash.
 - Absolute home paths must never be committed (public repo): `.githooks/` (enable with `git config core.hooksPath .githooks`) blocks them on commit/push and CI re-checks. Master-Claude writes home-relative `@~/` imports (its `mc-sync` converts legacy absolute ones); never run it here with `--absolute-imports`.
 - Never accept a Switch "Dock Update" on a patched hub (no update handler).

@@ -79,8 +79,10 @@ OVERLAYS = (
     ('rtd2142_hdr_avi', patch_rtd2142_hdr_avi),
 )
 
-# overlay_digests() as produced by SDCC 4.6.0 (sdas V05.50.4). Provisional until a
-# real stock dump has passed the full hash-locked pipeline with this assembler.
+# overlay_digests() as produced by SDCC 4.6.0 (sdas V05.50.4). The five VL103 entries are
+# confirmed: a real stock VL103 dump passed the full hash-locked pipeline with this
+# assembler and produced the hardware-tested image. 'rtd2142_hdr_avi' stays provisional
+# until a real stock RTD2142 dump does the same.
 OVERLAY_DIGESTS_SDCC_4_6_0 = {
     'target_responder': '0c26bd931afa0c52cf506a6ecffa8f9fdf62c9832c0ffbd637b8619c54820c43',
     'power_15v': 'c631c3d58b1f976850cae500a1b2c7af56314bb95a6c9a9ea349f3dec8fec07a',
