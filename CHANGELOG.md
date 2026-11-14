@@ -14,6 +14,8 @@ All notable changes to this project are documented here. The format follows
 - README "Switch 2 system versions" table recording which console versions the patched
   hub has been checked on. First entry: 23.0.1 with the VL103 patched and the RTD2142
   stock enters TV mode with the docking delay roughly halved.
+- `docs/macos-rtd2142.md`: step-by-step RTD2142 dump, offline patch and guarded flash on
+  macOS (Apple silicon), linked from the README's macOS section.
 - Antigravity CLI (`agy`) PR reviewer: `.github/workflows/antigravity-review.yml` and
   `scripts/agy-review*.sh` from the antigravity-pr-review template, run on a self-hosted
   runner labelled `agy`, with a project style guide in `.github/agy-review.md` (hash
