@@ -49,6 +49,8 @@ ruff check .
 ruff format --check .
 pyright
 python3 -m unittest discover -s tests
+npx --yes markdownlint-cli2@0.24.0 "**/*.md"
+bash scripts/agy-review-selftest.sh
 ```
 
 If you have stock dumps, also run the full pipeline:
