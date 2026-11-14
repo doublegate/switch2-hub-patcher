@@ -96,7 +96,7 @@ def build_candidate(base):
             'Unverified compatibility diagnostic, NOT an HDR fix or physical feature implementation.',
             'Source behavior may change; do not initiate official dock firmware updates.',
             'No converter/GPIO or new update/flash handlers.',
-            'Inherited IRQ/stack/cave/recovery and3W physical headroom unverified; USB ports empty.',
+            'Inherited IRQ/stack/cave/recovery and 3W physical headroom unverified; USB ports empty.',
             'No device access or automatic flashing; preserve v5/v6 baselines.',
         ],
         'changed_byte_count': len(changed),

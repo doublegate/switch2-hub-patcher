@@ -26,6 +26,10 @@ All notable changes to this project are documented here. The format follows
   newer local binary reported 32 table findings that CI never gated; the five affected
   table separator rows in `README.md` and `research/DP_HDR_AND_VRR.md` are now spaced.
 
+### Fixed
+
+- Typo in the `patch_versions` manifest's limits text ("and3W" -> "and 3W").
+
 ## [1.1.0] - 2026-11-13
 
 The patch outputs are byte-for-byte unchanged. The hardware-tested images (VL103
