@@ -32,7 +32,7 @@ jobs:
       - name: No absolute home paths
         run: .githooks/check-home-paths HEAD
       - name: markdownlint
-        run: npx --yes markdownlint-cli2@0.18.1 "**/*.md"
+        run: npx --yes markdownlint-cli2@0.24.0 "**/*.md"
 
   test:
     strategy:
