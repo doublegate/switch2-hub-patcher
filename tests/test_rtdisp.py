@@ -57,6 +57,21 @@ class RealtekISPTests(unittest.TestCase):
         self.assertEqual(chip.erased, [0x2F000])
         self.assertEqual(bytes(chip.flash), TARGET)
 
+    def test_flash_reports_progress_for_both_whole_chip_reads(self):
+        import contextlib
+        import io
+
+        from switch2_hub_patcher import cli
+
+        err = io.StringIO()
+        err.isatty = lambda: False
+        chip = FakeRTD(BASE, chunk=128)
+        with contextlib.redirect_stderr(err):
+            show = cli.progress_printer(rtdisp.FLASH_SIZE)
+            self.run_isp(chip, lambda isp: rtdisp.flash(isp, BASE, TARGET, KNOWN, quiet, show))
+        marks = [line.split()[0] for line in err.getvalue().splitlines()]
+        self.assertEqual(marks, [f'{p}%' for p in range(10, 101, 10)] * 2)
+
     def test_restore(self):
         chip = FakeRTD(TARGET)
         self.run_isp(chip, lambda isp: rtdisp.flash(isp, TARGET, BASE, KNOWN, quiet))

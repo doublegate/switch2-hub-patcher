@@ -8,6 +8,7 @@ import argparse
 import json
 import platform
 import sys
+import time
 from pathlib import Path
 
 from . import __version__, dpaux, fwupd, rtd2142_map, rtdisp, status
@@ -120,28 +121,42 @@ def cmd_survey(args):
     return 0
 
 
-def open_transport(args):
+def open_transport(args, address=rtdisp.ISP_ADDR):
     if getattr(args, 'bus', None) is not None:
         from .i2c import LinuxI2C
 
-        return LinuxI2C(args.bus, chunk=args.chunk or 128)
+        return LinuxI2C(args.bus, address=address, chunk=args.chunk or 128)
     if platform.system() == 'Darwin':
         from .i2c import MacAVI2C
 
-        return MacAVI2C(args.mac_service, chunk=args.chunk or 32)
+        return MacAVI2C(args.mac_service, address=address, chunk=args.chunk or 32)
     raise OSError('give --bus N (Linux /dev/i2c-N, see find-aux)')
 
 
-def progress_printer(total):
-    state = {'last': -1}
+def progress_printer(total, step=10, clock=time.monotonic):
+    """Progress on stderr: an updating percentage on a terminal; otherwise (a log, a pipe,
+    an agent) one plain line per `step` percent with the elapsed time, so long reads over
+    slow transports show they are moving and how fast. A count lower than the previous one
+    starts a new pass (rtd-flash reads the whole chip twice with one printer)."""
+    state = {'last': -1, 'start': clock(), 'done': 0}
 
     def show(done):
+        if done < state['done']:
+            state.update(last=-1, start=clock())
+        state['done'] = done
         pct = done * 100 // total
-        if pct != state['last'] and sys.stderr.isatty():
-            state['last'] = pct
-            print(f'\r  {pct:3d}%', end='', file=sys.stderr, flush=True)
-            if done >= total:
-                print(file=sys.stderr)
+        if sys.stderr.isatty():
+            if pct != state['last']:
+                state['last'] = pct
+                print(f'\r  {pct:3d}%', end='', file=sys.stderr, flush=True)
+                if done >= total:
+                    print(file=sys.stderr)
+            return
+        mark = pct - pct % step
+        if mark > state['last'] and mark > 0:
+            state['last'] = mark
+            secs = int(clock() - state['start'])
+            print(f'  {mark:3d}%  {secs // 60}m{secs % 60:02d}s', file=sys.stderr, flush=True)
 
     return show
 
@@ -194,6 +209,33 @@ def cmd_rtd_dump(args):
         return 0
 
     return run_isp(args, action)
+
+
+def cmd_rtd_peek(args):
+    from . import rtd2142_map, rtddbg
+
+    try:
+        addresses = rtddbg.parse_addresses(args.addresses)
+    except rtddbg.DebugError as exc:
+        return error(exc)
+    try:
+        transport = open_transport(args, address=rtddbg.DEBUG_ADDR)
+    except OSError as exc:
+        return error(exc)
+    print(f'transport: {transport.name}, debug interface at I2C {rtddbg.DEBUG_ADDR:#04x}')
+    print('experimental: protocol decoded from the stock firmware; read commands only')
+    try:
+        values = rtddbg.peek(transport, addresses)
+    except (OSError, rtddbg.DebugError) as exc:
+        return error(exc)
+    finally:
+        transport.close()
+    print(f'self-check ok: {rtddbg.SELF_CHECK[0]:04X} = {rtddbg.SELF_CHECK[1]:#04x}')
+    for address, value in values:
+        block, name, _ = rtd2142_map.REGISTERS.get(address, ('', '', ''))
+        label = f'  {name} ({block})' if name else ''
+        print(f'{address:04X}  {value:#04x}  {value:08b}{label}')
+    return 0
 
 
 def cmd_rtd_flash(args):
@@ -306,7 +348,7 @@ def cmd_vl103_flash(args):
     return 0
 
 
-def add_transport_args(p):
+def add_transport_args(p, reset=True):
     p.add_argument('--bus', type=int, help='Linux: /dev/i2c-N of the hub (see find-aux)')
     p.add_argument(
         '--mac-service',
@@ -320,11 +362,12 @@ def add_transport_args(p):
         choices=(16, 32, 64, 128),
         help='bytes per I2C transfer (default 128 Linux, 32 macOS)',
     )
-    p.add_argument(
-        '--no-reset',
-        action='store_true',
-        help='do not reset the hub MCU when done (flashrom reset_mcu=0)',
-    )
+    if reset:
+        p.add_argument(
+            '--no-reset',
+            action='store_true',
+            help='do not reset the hub MCU when done (flashrom reset_mcu=0)',
+        )
 
 
 def main(argv=None):
@@ -392,6 +435,15 @@ def main(argv=None):
     p.add_argument('--allow-brick', action='store_true')
     add_transport_args(p)
     p = sub.add_parser(
+        'rtd-peek',
+        help='experimental: read live RTD2142 XDATA registers over the 0x35 debug '
+        'interface (read-only)',
+    )
+    p.add_argument(
+        'addresses', nargs='+', metavar='ADDR', help='hex address or range, e.g. B130 or B141-B150'
+    )
+    add_transport_args(p, reset=False)
+    p = sub.add_parser(
         'survey',
         help='research: list RTD2142 code touching DP/HDMI '
         'colorimetry and VRR registers (read-only)',
@@ -428,6 +480,8 @@ def main(argv=None):
         return cmd_rtd_dump(args)
     if args.command == 'rtd-flash':
         return cmd_rtd_flash(args)
+    if args.command == 'rtd-peek':
+        return cmd_rtd_peek(args)
     if args.command == 'survey':
         return cmd_survey(args)
     return cmd_identify(args)

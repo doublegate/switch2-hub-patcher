@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from switch2_hub_patcher import cli, fwupd, pipeline, status
@@ -113,6 +114,40 @@ class Vl103FlashTests(unittest.TestCase):
         self.assertIn('target image is not a known', err)
 
 
+class ProgressTests(unittest.TestCase):
+    def run_progress(self, tty, steps, total=1000):
+        ticks = iter(range(0, 10_000, 7))
+        err = io.StringIO()
+        err.isatty = lambda: tty
+        with contextlib.redirect_stderr(err):
+            show = cli.progress_printer(total, clock=lambda: next(ticks))
+            for done in steps:
+                show(done)
+        return err.getvalue()
+
+    def test_non_terminal_prints_a_line_per_ten_percent_with_elapsed_time(self):
+        out = self.run_progress(False, range(31, 1001, 31))
+        lines = out.splitlines()
+        self.assertEqual([line.split()[0] for line in lines], [f'{p}%' for p in range(10, 100, 10)])
+        self.assertNotIn('\r', out)
+        self.assertRegex(lines[0], r'^ +10%  \d+m\d\ds$')
+
+    def test_non_terminal_reports_completion_once(self):
+        out = self.run_progress(False, [500, 1000, 1000])
+        self.assertEqual([line.split()[0] for line in out.splitlines()], ['50%', '100%'])
+
+    def test_second_pass_with_the_same_printer_reports_again(self):
+        # rtd-flash: whole-chip read, sector rewrite, whole-chip re-read, one printer.
+        out = self.run_progress(False, [500, 1000, 500, 1000])
+        self.assertEqual(
+            [line.split()[0] for line in out.splitlines()], ['50%', '100%', '50%', '100%']
+        )
+
+    def test_terminal_keeps_the_updating_percentage(self):
+        out = self.run_progress(True, [500, 1000])
+        self.assertEqual(out, '\r   50%\r  100%\n')
+
+
 class StatusTests(unittest.TestCase):
     def test_next_step(self):
         base = [(status.OK, 'SDCC', ''), (status.OK, 'VIA VL817 hub on USB', 'present')]
@@ -137,6 +172,23 @@ class StatusTests(unittest.TestCase):
 
 
 class GuideTests(unittest.TestCase):
+    def setUp(self):
+        # The guide must never reach real hardware from a test: with a hub attached, an
+        # unmocked dump or ISP probe talks to the live chip (and races any running dump).
+        from switch2_hub_patcher import guide
+
+        self.hardware = {}
+        for owner, name, value in (
+            (cli, 'cmd_vl103_dump', 0),
+            (cli, 'cmd_vl103_flash', 0),
+            (cli, 'cmd_rtd_dump', 0),
+            (cli, 'cmd_rtd_flash', 0),
+            (guide, 'transport_args', SimpleNamespace()),
+        ):
+            patcher = mock.patch.object(owner, name, return_value=value)
+            self.hardware[name] = patcher.start()
+            self.addCleanup(patcher.stop)
+
     def test_declines_everything(self):
         from switch2_hub_patcher import guide
 
@@ -154,14 +206,15 @@ class GuideTests(unittest.TestCase):
         from switch2_hub_patcher import guide
 
         rows = [(status.OK, 'SDCC', '')]
+        flash = self.hardware['cmd_vl103_flash']
         with (
             tempfile.TemporaryDirectory() as tmp,
             mock.patch.object(status, 'checks', return_value=rows),
-            mock.patch.object(cli, 'cmd_vl103_flash') as flash,
         ):
             for name in ('vl103-stock.bin', 'vl103-patched.bin'):
                 Path(tmp, name).write_bytes(b'')
             guide.run(cli, answer=lambda _: 'y', out=lambda _: None, cwd=tmp)
+            self.hardware['cmd_rtd_dump'].assert_called_once()  # 'y' reaches the dump step
             flash.assert_not_called()
             guide.run(
                 cli,
