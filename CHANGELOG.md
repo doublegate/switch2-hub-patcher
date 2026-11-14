@@ -11,6 +11,8 @@ All notable changes to this project are documented here. The format follows
 - `.githooks/` pre-commit and pre-push guards (`git config core.hooksPath .githooks`)
   that block absolute home paths before they leave the machine; CI now calls the same
   `.githooks/check-home-paths` script.
+- README "Switch 2 system versions" table recording which console versions the patched
+  hub has been checked on (first entry: 23.0.1, VL103 patched, docking test pending).
 
 ### Changed
 
