@@ -40,7 +40,7 @@ SYNTHETIC_VL103 = (
     'f4068d18380030034a0f84702011468a6abb4aa53da97e9289796c0bd09241f2',
     '1e7ae24aa2ce36d25bb243851ec9721da769514bcac175974eba5ea976860278',
 )
-SYNTHETIC_RTD2142_SDR_FIX = 'd75629f67aa5547520f5232036467407721ead22226c2ddc9e538a0ef3b3ee70'
+SYNTHETIC_RTD2142_SDR_FIX = '960e277c5aa2f4d1a951405c1297330b1f09d4e6cc49df81eaf75542ca12a792'
 SYNTHETIC_RTD2142 = 'fa03c9a336b3f9280154d41465402cd185ffaae2e13bb27a4c4219e7c10955f9'
 
 
@@ -301,15 +301,26 @@ class AssemblerTests(unittest.TestCase):
     def test_synthetic_rtd2142_sdr_fix(self):
         image, manifest = synthetic.run_rtd2142_sdr_fix(synthetic.rtd2142_sdr_fix_image())
         self.assertEqual(manifest['banks_changed'], [2, 5])
-        self.assertEqual(manifest['changed_byte_count'], 71)  # 3 hooks (8 bytes differ) + 62 + 1
+        self.assertEqual(manifest['changed_byte_count'], 100)  # 4 hooks + overlays + 6 bytes
         self.assertEqual(
             [(b['bank'], b['address'], b['old'], b['new']) for b in manifest['byte_patches']],
-            [(2, 'c432', '6077', '8077')],
+            [
+                (2, 'cdb1', 'fc', 'dc'),
+                (2, 'e279', '64', 'fa'),
+                (2, 'c76e', 'b406', '800a'),
+                (2, 'fa18', 'bf08', '800a'),
+            ],
         )
         self.assertFalse(manifest['hardware_validated'])
         hooks = {(h['bank'], h['address']): h['new'] for h in manifest['hooks']}
         self.assertEqual(
-            hooks, {(5, 'c476'): '02fd80', (5, 'dead'): '02fd9b', (2, 'e952'): '02ff00'}
+            hooks,
+            {
+                (5, 'c476'): '02fd80',
+                (5, 'dead'): '02fd9b',
+                (2, 'e952'): '02ff00',
+                (2, 'f31f'): '02ff20',
+            },
         )
         if pipeline.overlay_digests() == pipeline.OVERLAY_DIGESTS_SDCC_4_6_0:
             self.assertEqual(synthetic.sha(image), SYNTHETIC_RTD2142_SDR_FIX)
@@ -326,6 +337,9 @@ class AssemblerTests(unittest.TestCase):
         self.assertEqual(bank5.hex(), '90b403e020e61190e3e6e0541f6006e054e0f0c32290b40302c479')
         # 5B06 &= FC, inc dptr, 5B07 &= 0F, ljmp E959
         self.assertEqual(bank2.hex(), '905b06e054fcf0a3e0540ff002e959')
+        guard = bytes(memory[(2, a)] for a in range(0xFF20, 0xFF35))
+        # hdmi_drm_enable_guard: EOTF (DD9F & 7) == 0 -> 5B6B bit 5 off, else on
+        self.assertEqual(guard.hex(), '90dd9fe05407905b6b6005e04420f022e054dff022')
         self.assertEqual(symbols['rx2_fmt_'], (5, 0xFD80))
         self.assertEqual(symbols['rx2_fiel'], (5, 0xFD9B))
         self.assertEqual(symbols['hdmi_dee'], (2, 0xFF00))
@@ -335,7 +349,8 @@ class AssemblerTests(unittest.TestCase):
         for at, value, message in (
             (5 * 0x10000 + 0xC476, 0x12, 'hook mismatch at 5:c476'),
             (2 * 0x10000 + 0xFF10, 0x00, 'region 2:ff00 not erased'),
-            (2 * 0x10000 + 0xC432, 0x80, 'byte patch mismatch at 2:c432'),
+            (2 * 0x10000 + 0xE279, 0x00, 'byte patch mismatch at 2:e279'),
+            (2 * 0x10000 + 0xFF30, 0x00, 'region 2:ff20 not erased'),
         ):
             image = bytearray(good)
             image[at] = value

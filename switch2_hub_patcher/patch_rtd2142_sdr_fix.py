@@ -30,8 +30,14 @@ PARTS = (
     (
         'rtd2142_hdmi_deep_color',
         2,
-        (0xFF00, 0xFF40),
+        (0xFF00, 0xFF20),
         ((0xE952, bytes.fromhex('90 5b 06'), 'hdmi_deep_color_off'),),
+    ),
+    (
+        'rtd2142_hdmi_drm',
+        2,
+        (0xFF20, 0xFF50),
+        ((0xF31F, bytes.fromhex('12 4a e7'), 'hdmi_drm_enable_guard'),),
     ),
 )
 LJMP = 0x02
@@ -40,13 +46,38 @@ LJMP = 0x02
 BYTE_PATCHES = (
     (
         2,
-        0xC432,
-        bytes.fromhex('60 77'),
-        bytes.fromhex('80 77'),
-        "hdmi_scdc_scramble_check: JZ -> SJMP to the success path (C4AB). The sink's "
-        'Scrambling_Status is still read, but a missing bit no longer makes the hub rewrite '
-        'TMDS_Config with video running and, after 6 misses, turn scrambling off (no picture '
-        'at 594 MHz).',
+        0xCDB1,
+        bytes.fromhex('fc'),
+        bytes.fromhex('dc'),
+        'hdmi_pkt_enable_all: 5B6B |= FC -> |= DC. An output restart no longer turns the HDR '
+        "packet on with the previous mode's metadata; hdmi_drm_enable_guard turns it on once "
+        'it is rebuilt and the EOTF says HDR.',
+    ),
+    (
+        2,
+        0xE279,
+        bytes.fromhex('64'),
+        bytes.fromhex('fa'),
+        'hdmi_scdc_scramble_start: wait 250 ms (was 100 ms) after the TMDS_Config write before '
+        'the first Scrambling_Status check; HDMI 2.0 allows the sink 200 ms, some need ~150 ms.',
+    ),
+    (
+        2,
+        0xC76E,
+        bytes.fromhex('b4 06'),
+        bytes.fromhex('80 0a'),
+        'hdmi_state_running_q: CJNE A,#6 -> SJMP C77A. The scrambling recovery (re-check, '
+        'TMDS_Config rewrite) stays, but at 6 misses the hub no longer re-enters setup and '
+        'restarts the output unscrambled (no picture at 594 MHz).',
+    ),
+    (
+        2,
+        0xFA18,
+        bytes.fromhex('bf 08'),
+        bytes.fromhex('80 0a'),
+        'hdmi_gcp_update: CJNE R7,#8 -> SJMP FA24. 8-bit (SDR) output also gets the General '
+        'Control Packet with Clear_AVMUTE (hdmi_gcp_enable), as 10/12-bit already does; with '
+        'the GCP off some sinks stay muted after a re-sync (TV power cycle, input switch).',
     ),
 )
 
@@ -113,7 +144,7 @@ def build(base):
     if not set(changed) <= allowed:
         raise ValueError('unexpected footprint')
     manifest = {
-        'experiment': 'rtd2142-sdr-fix-v4',
+        'experiment': 'rtd2142-sdr-fix-v6',
         'base_sha256': BASE_SHA,
         'output_sha256': sha(image),
         'source_sha256': {
@@ -125,8 +156,10 @@ def build(base):
         'hooks': hooks,
         'byte_patches': byte_patches,
         'symbols': {s: f'{bank}:{at:04x}' for s, (bank, at) in symbols.items()},
-        'behaviour': 'HDMI TX: the SCDC scrambling-status check always takes its success path '
-        '(no TMDS_Config rewrites with video running, no fall-back to unscrambled output); '
+        'behaviour': 'HDMI TX: the GCP with Clear_AVMUTE is sent in every mode; the HDR (DRM) '
+        'packet is sent only while the source metadata EOTF '
+        'is non-zero, and an output restart leaves it off until rebuilt; first scrambling-status '
+        'check after 250 ms; recovery kept but no fall-back to unscrambled output; '
         'DP RX stream 2: format field 8 (the colorimetry code the HDMI side '
         'reads) is 0 while MSA MISC1 bit 6 is clear; and when MISC1 bit 6 is clear and a VSC-derived '
         'colorimetry code is left in E3E6[4:0], the format check clears it (the power-up '

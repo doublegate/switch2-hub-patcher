@@ -71,28 +71,40 @@ RTD2142_SDR_FIX_STEPS = (
     (
         'DP RX colorimetry re-capture after HDR -> SDR; HDMI 8-bit colour depth',
         patch_rtd2142_sdr_fix.build,
-        '390ed39dc2bb2880c0251d63d6889856438c8ec775123c203f77b720740737cd',
+        '3a56a3aa183f7249743c7d9b7a19b89ac528053bc1deb0882126178c21cbfd62',
     ),
 )
-RTD2142_SDR_FIX_LABEL = 'RTD2142 SDR-fix candidate v4 (not yet tested on a hub)'
+RTD2142_SDR_FIX_LABEL = 'RTD2142 SDR-fix candidate v6 (not yet tested on a hub)'
 # Superseded candidates, still known so rtd-flash can move a hub off them; not buildable.
 # v1 (flashed 2026-11-14): fixed the HDMI colour depth, not the stale colorimetry.
 # v2 (flashed 2026-11-14): fixed the steady state on every switch; about half the switches
 # still failed (AVI built during the restart before the stale code was cleared).
 # v3 (flashed 2026-11-14): closed that race; SDR much smoother, but the HDMI scrambling
 # check still escalated on this TV (TMDS_Config rewrites, scrambling turned off: no signal).
+# v4 (flashed 2026-11-14): forced the scrambling check to pass; no retries, but the TV did
+# worse (the rewrites were also its recovery) and SDR still cycled at times.
+# v5 (flashed 2026-11-14): DRM packet off in SDR, 250 ms first check, no unscrambled
+# fall-back; mostly clean, but in SDR the TV did not come back after a re-sync (no GCP).
 RTD2142_SDR_FIX_SUPERSEDED = (
     (
         'f191da0f7201fe26c9f9924b11a7f486ce18faa305c145b806cb0f251e518e92',
-        'RTD2142 SDR-fix candidate v1 (superseded; flash stock or v4 over it)',
+        'RTD2142 SDR-fix candidate v1 (superseded; flash stock or v6 over it)',
     ),
     (
         'd249fa204f68e8963fe8246578319e1be544fe9a8fe656ecdda5237a8a54a695',
-        'RTD2142 SDR-fix candidate v2 (superseded; flash stock or v4 over it)',
+        'RTD2142 SDR-fix candidate v2 (superseded; flash stock or v6 over it)',
     ),
     (
         'f5de8f43f8c44338822bec2ec31b67bda326f5e985f867410caf6f099cf22b8b',
-        'RTD2142 SDR-fix candidate v3 (superseded; flash stock or v4 over it)',
+        'RTD2142 SDR-fix candidate v3 (superseded; flash stock or v6 over it)',
+    ),
+    (
+        '390ed39dc2bb2880c0251d63d6889856438c8ec775123c203f77b720740737cd',
+        'RTD2142 SDR-fix candidate v4 (superseded; flash stock or v6 over it)',
+    ),
+    (
+        'cc2241056e8cd1311234a232403f35fdfd12ceff456d9ca5ac514fd987920ca0',
+        'RTD2142 SDR-fix candidate v5 (superseded; flash stock or v6 over it)',
     ),
 )
 
@@ -122,7 +134,7 @@ OVERLAY_DIGESTS_SDCC_4_6_0 = {
     'query02': '228747974dbb46faf5f4668d290aa9d53b90c36cf4015e9ea449774f9b173fe0',
     'versions': 'da65a9f8b9ce0866c928871116bee7b71db609eec14fabb99d41da4b702f307b',
     'rtd2142_hdr_avi': '8344a23a15f69a898616bc24017a1c83603bec0d19b5659a73a2173c87a14bdd',
-    'rtd2142_sdr_fix': '560564db59d05c45454e830a341221421ae92e82c5fcb420940829eb89793ac9',
+    'rtd2142_sdr_fix': '1c526f8007b7d9b3a4d1b5ea0cb7ef41550178b91dfcebc330d00a6c84d5c0c1',
 }
 
 
