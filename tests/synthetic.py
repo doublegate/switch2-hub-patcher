@@ -18,6 +18,7 @@ from switch2_hub_patcher import (
     patch_power_15v,
     patch_query02,
     patch_rtd2142_hdr_avi,
+    patch_rtd2142_sdr_fix,
     patch_svid,
     patch_versions,
 )
@@ -57,6 +58,21 @@ def rtd2142_image():
     for at, old, _, _ in patch_rtd2142_hdr_avi.HOOKS:
         image[base + at : base + at + 3] = old
     return bytes(image)
+
+
+def rtd2142_sdr_fix_image():
+    image = _filler(0x200000, 'rtd2142-sdr-fix')
+    for _, bank, (lo, hi), hooks in patch_rtd2142_sdr_fix.PARTS:
+        base = bank * patch_rtd2142_sdr_fix.BANK_SIZE
+        image[base + lo : base + hi] = b'\xff' * (hi - lo)
+        for at, old, _ in hooks:
+            image[base + at : base + at + 3] = old
+    return bytes(image)
+
+
+def run_rtd2142_sdr_fix(image):
+    with mock.patch.object(patch_rtd2142_sdr_fix, 'BASE_SHA', sha(image)):
+        return patch_rtd2142_sdr_fix.build(image)
 
 
 VL103_CHAIN = (

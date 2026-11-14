@@ -18,7 +18,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import synthetic
 
-from switch2_hub_patcher import cli, dpaux, hexfile, pipeline, rtd2142_map
+from switch2_hub_patcher import (
+    cli,
+    dpaux,
+    hexfile,
+    patch_rtd2142_sdr_fix,
+    pipeline,
+    rtd2142_map,
+)
 from switch2_hub_patcher.vl103_crc import crc16_usb, stored_and_computed
 
 HAVE_SDCC = bool(shutil.which('sdas8051') and shutil.which('sdld'))
@@ -33,6 +40,7 @@ SYNTHETIC_VL103 = (
     'f4068d18380030034a0f84702011468a6abb4aa53da97e9289796c0bd09241f2',
     '1e7ae24aa2ce36d25bb243851ec9721da769514bcac175974eba5ea976860278',
 )
+SYNTHETIC_RTD2142_SDR_FIX = 'a19b9ab5d01bd28f55340842c04003559d4632bd354cf32ef5b1eb9375b08407'
 SYNTHETIC_RTD2142 = 'fa03c9a336b3f9280154d41465402cd185ffaae2e13bb27a4c4219e7c10955f9'
 
 
@@ -59,8 +67,10 @@ class OfflineTests(unittest.TestCase):
 
     def test_asm_sources_present(self):
         asm = Path(pipeline.__file__).parent / 'asm'
-        for name, _ in pipeline.OVERLAYS:
-            self.assertTrue((asm / f'{name}.asm').is_file(), name)
+        for name, module in pipeline.OVERLAYS:
+            names = [part[0] for part in getattr(module, 'PARTS', ())] or [name]
+            for source in names:
+                self.assertTrue((asm / f'{source}.asm').is_file(), source)
 
     def test_step_hash_chain_matches_readme(self):
         self.assertEqual(
@@ -104,6 +114,9 @@ class OfflineTests(unittest.TestCase):
             self.assertIn('partly patched (after step 3/6', pipeline.identify(b''))
         with mock.patch.object(pipeline, 'sha256', return_value=pipeline.VL103_STEPS[-1][2]):
             self.assertEqual(pipeline.identify(b''), 'VL103 patched')
+        sdr_fix = pipeline.RTD2142_SDR_FIX_STEPS[-1][2]
+        with mock.patch.object(pipeline, 'sha256', return_value=sdr_fix):
+            self.assertIn('not yet tested on a hub', pipeline.identify(b''))
         self.assertIn('VL103-sized', pipeline.identify(b'\0' * 0x8000))
         self.assertIn('RTD2142-sized', pipeline.identify(b'\0' * 0x200000))
         self.assertEqual(pipeline.identify(b'abc'), 'unknown')
@@ -282,6 +295,42 @@ class AssemblerTests(unittest.TestCase):
         if pipeline.overlay_digests() == pipeline.OVERLAY_DIGESTS_SDCC_4_6_0:
             self.assertEqual(synthetic.sha(image), SYNTHETIC_RTD2142)
 
+    def test_synthetic_rtd2142_sdr_fix(self):
+        image, manifest = synthetic.run_rtd2142_sdr_fix(synthetic.rtd2142_sdr_fix_image())
+        self.assertEqual(manifest['banks_changed'], [2, 5])
+        self.assertEqual(manifest['changed_byte_count'], 36)  # two 3-byte hooks + 30 bytes
+        self.assertFalse(manifest['hardware_validated'])
+        hooks = {(h['bank'], h['address']): h['new'] for h in manifest['hooks']}
+        self.assertEqual(hooks, {(5, 'c476'): '02fd80', (2, 'e952'): '02ff00'})
+        if pipeline.overlay_digests() == pipeline.OVERLAY_DIGESTS_SDCC_4_6_0:
+            self.assertEqual(synthetic.sha(image), SYNTHETIC_RTD2142_SDR_FIX)
+
+    def test_sdr_fix_overlays_rejoin_the_stock_code(self):
+        memory, symbols = patch_rtd2142_sdr_fix.assemble()
+        bank5 = bytes(memory[(5, a)] for a in range(0xFD80, 0xFD8F))
+        bank2 = bytes(memory[(2, a)] for a in range(0xFF00, 0xFF0F))
+        # mov dptr,#B403 / movx / jb acc.6 / jnb 2E / clr c / ret / ljmp C479
+        self.assertEqual(bank5.hex(), '90b403e020e605302e02c32202c479')
+        # 5B06 &= FC, inc dptr, 5B07 &= 0F, ljmp E959
+        self.assertEqual(bank2.hex(), '905b06e054fcf0a3e0540ff002e959')
+        self.assertEqual(symbols['rx2_fmt_'], (5, 0xFD80))
+        self.assertEqual(symbols['hdmi_dee'], (2, 0xFF00))
+
+    def test_sdr_fix_rejects_bad_guards(self):
+        good = synthetic.rtd2142_sdr_fix_image()
+        for at, value, message in (
+            (5 * 0x10000 + 0xC476, 0x12, 'hook mismatch at 5:c476'),
+            (2 * 0x10000 + 0xFF10, 0x00, 'region 2:ff00 not erased'),
+        ):
+            image = bytearray(good)
+            image[at] = value
+            with self.assertRaisesRegex(ValueError, message):
+                synthetic.run_rtd2142_sdr_fix(bytes(image))
+
+    def test_sdr_fix_needs_the_exact_stock_image(self):
+        with self.assertRaisesRegex(ValueError, 'exact original RTD2142'):
+            patch_rtd2142_sdr_fix.build(synthetic.rtd2142_sdr_fix_image())
+
     def test_research_draft_assembles(self):
         research = Path(__file__).resolve().parents[1] / 'research'
         with mock.patch.object(hexfile, 'ASM', research):
@@ -311,6 +360,13 @@ class DumpTests(unittest.TestCase):
 
     def test_rtd2142(self):
         self._run('S2HUB_RTD2142_DUMP', pipeline.patch_rtd2142, pipeline.RTD2142_STEPS[-1][2])
+
+    def test_rtd2142_sdr_fix(self):
+        self._run(
+            'S2HUB_RTD2142_DUMP',
+            pipeline.patch_rtd2142_sdr_fix_only,
+            pipeline.RTD2142_SDR_FIX_STEPS[-1][2],
+        )
 
 
 if __name__ == '__main__':

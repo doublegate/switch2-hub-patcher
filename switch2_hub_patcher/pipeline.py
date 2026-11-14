@@ -17,6 +17,7 @@ from . import (
     patch_power_15v,
     patch_query02,
     patch_rtd2142_hdr_avi,
+    patch_rtd2142_sdr_fix,
     patch_versions,
 )
 
@@ -64,6 +65,16 @@ RTD2142_STEPS = (
         'f242d130c7a0947f75bc673eb6100160c3cdb8e1d2f5cb9d1a5dca5332a742f1',
     ),
 )
+# CANDIDATE (not yet tested on a hub): the stock firmware's HDR -> SDR picture-format bugs.
+# Built from the stock image on its own, so it can be tested without the BT.2020 patch.
+RTD2142_SDR_FIX_STEPS = (
+    (
+        'DP RX colorimetry re-capture after HDR -> SDR; HDMI 8-bit colour depth',
+        patch_rtd2142_sdr_fix.build,
+        'f191da0f7201fe26c9f9924b11a7f486ce18faa305c145b806cb0f251e518e92',
+    ),
+)
+RTD2142_SDR_FIX_LABEL = 'RTD2142 SDR-fix candidate (not yet tested on a hub)'
 
 
 TOOLCHAIN = ('sdas8051', 'sdld')
@@ -77,11 +88,13 @@ OVERLAYS = (
     ('query02', patch_query02),
     ('versions', patch_versions),
     ('rtd2142_hdr_avi', patch_rtd2142_hdr_avi),
+    ('rtd2142_sdr_fix', patch_rtd2142_sdr_fix),
 )
 
-# overlay_digests() as produced by SDCC 4.6.0 (sdas V05.50.4). All six entries are
+# overlay_digests() as produced by SDCC 4.6.0 (sdas V05.50.4). The first six entries are
 # confirmed: real stock VL103 and RTD2142 dumps passed the full hash-locked pipeline with
-# this assembler and produced the hardware-tested images.
+# this assembler and produced the flashed images. rtd2142_sdr_fix is recorded from a real
+# stock dump too, but that image is still a candidate.
 OVERLAY_DIGESTS_SDCC_4_6_0 = {
     'target_responder': '0c26bd931afa0c52cf506a6ecffa8f9fdf62c9832c0ffbd637b8619c54820c43',
     'power_15v': 'c631c3d58b1f976850cae500a1b2c7af56314bb95a6c9a9ea349f3dec8fec07a',
@@ -89,6 +102,7 @@ OVERLAY_DIGESTS_SDCC_4_6_0 = {
     'query02': '228747974dbb46faf5f4668d290aa9d53b90c36cf4015e9ea449774f9b173fe0',
     'versions': 'da65a9f8b9ce0866c928871116bee7b71db609eec14fabb99d41da4b702f307b',
     'rtd2142_hdr_avi': '8344a23a15f69a898616bc24017a1c83603bec0d19b5659a73a2173c87a14bdd',
+    'rtd2142_sdr_fix': '15c81e9dbf9a927ff5a7df6749c8c9adec473802a998009a89fab59c8d74f7e8',
 }
 
 
@@ -137,6 +151,9 @@ def overlay_digests():
         try:
             if module is patch_rtd2142_hdr_avi:
                 memory = patch_rtd2142_hdr_avi.assemble()[0]
+            elif module is patch_rtd2142_sdr_fix:
+                parts = patch_rtd2142_sdr_fix.assemble()[0]
+                memory = {bank * 0x10000 + at: b for (bank, at), b in parts.items()}
             else:
                 memory = module.assemble()
         except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
@@ -181,6 +198,10 @@ def patch_rtd2142(image, log=print, manifests=None):
     return run(image, RTD2142_STOCK, RTD2142_STEPS, log, manifests)
 
 
+def patch_rtd2142_sdr_fix_only(image, log=print, manifests=None):
+    return run(image, RTD2142_STOCK, RTD2142_SDR_FIX_STEPS, log, manifests)
+
+
 def _known_images():
     known = {VL103_STOCK: 'VL103 stock', RTD2142_STOCK: 'RTD2142 stock'}
     for chip, steps in (('VL103', VL103_STEPS), ('RTD2142', RTD2142_STEPS)):
@@ -192,6 +213,7 @@ def _known_images():
                     f'{chip} partly patched (after step {number}/{len(steps)}: '
                     f'{name}); not a final image, do not flash'
                 )
+    known[RTD2142_SDR_FIX_STEPS[-1][2]] = RTD2142_SDR_FIX_LABEL
     return known
 
 

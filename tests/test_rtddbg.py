@@ -55,6 +55,65 @@ class DebugSessionTests(unittest.TestCase):
                 rtddbg.parse_addresses(bad)
 
 
+class ClearBitsTests(unittest.TestCase):
+    def test_clears_only_the_allowed_bit(self):
+        chip = FakeDebugSlave({0xE362: 0x23})
+        self.assertEqual(rtddbg.clear_bits(chip, 0xE362, 0x02, sleep=no_sleep), (0x23, 0x21))
+        self.assertEqual(chip.xdata[0xE362], 0x21)
+        self.assertFalse(chip.debug)
+        writes = [(reg, data) for reg, data in chip.log if reg in rtddbg.WRITE_COMMANDS]
+        self.assertEqual(writes, [(0x03, b'\x21'), (0x3B, b'\x62')])
+
+    def test_clears_the_hdmi_colour_depth_nibble_only(self):
+        chip = FakeDebugSlave({0x5B07: 0x63})
+        self.assertEqual(rtddbg.clear_bits(chip, 0x5B07, 0xF0, sleep=no_sleep), (0x63, 0x03))
+        with self.assertRaises(rtddbg.DebugError):
+            rtddbg.clear_bits(chip, 0x5B07, 0x0F, sleep=no_sleep)
+
+    def test_nothing_is_written_when_already_clear(self):
+        chip = FakeDebugSlave({0xE362: 0x21})
+        self.assertEqual(rtddbg.clear_bits(chip, 0xE362, 0x02, sleep=no_sleep), (0x21, 0x21))
+        self.assertFalse([reg for reg, _ in chip.log if reg in rtddbg.WRITE_COMMANDS])
+
+    def test_other_addresses_and_bits_are_refused_before_the_bus(self):
+        for address, mask in ((0xE35D, 0x02), (0xE362, 0x01), (0xE362, 0x00), (0xFFFF, 0x02)):
+            chip = FakeDebugSlave({0xE362: 0x23, 0xE35D: 0x23})
+            with self.assertRaises(rtddbg.DebugError, msg=(address, mask)):
+                rtddbg.clear_bits(chip, address, mask, sleep=no_sleep)
+            self.assertEqual(chip.log, [])
+
+    def test_failed_self_check_writes_nothing(self):
+        chip = FakeDebugSlave({0xE362: 0x23}, slave_address=0x00)
+        with self.assertRaises(rtddbg.DebugError):
+            rtddbg.clear_bits(chip, 0xE362, 0x02, sleep=no_sleep)
+        self.assertEqual(chip.xdata[0xE362], 0x23)
+        self.assertFalse([reg for reg, _ in chip.log if reg in rtddbg.WRITE_COMMANDS])
+
+    def test_cli_needs_the_flag_and_refuses_before_opening_hardware(self):
+        for argv in (
+            ['rtd-clear-bits', 'E362', '02'],
+            ['rtd-clear-bits', 'E35D', '02', '--volatile-ram-write'],
+        ):
+            with (
+                mock.patch.object(cli, 'open_transport') as opened,
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                self.assertNotEqual(cli.main(argv), 0, argv)
+            opened.assert_not_called()
+
+    def test_cli_clears_and_reports(self):
+        chip = FakeDebugSlave({0xE362: 0x23})
+        out = io.StringIO()
+        with (
+            mock.patch.object(cli, 'open_transport', return_value=chip),
+            mock.patch.object(rtddbg.time, 'sleep'),
+            contextlib.redirect_stdout(out),
+        ):
+            code = cli.main(['rtd-clear-bits', 'E362', '02', '--volatile-ram-write'])
+        self.assertEqual(code, 0)
+        self.assertIn('E362  before 0x23  after 0x21', out.getvalue())
+
+
 class PeekCommandTests(unittest.TestCase):
     def test_cli_prints_named_registers(self):
         chip = FakeDebugSlave({0xB130: 0x80})

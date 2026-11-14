@@ -14,6 +14,8 @@ from pathlib import Path
 from . import __version__, dpaux, fwupd, rtd2142_map, rtdisp, status
 from .pipeline import (
     OVERLAY_DIGESTS_SDCC_4_6_0,
+    RTD2142_SDR_FIX_LABEL,
+    RTD2142_SDR_FIX_STEPS,
     RTD2142_STEPS,
     RTD2142_STOCK,
     VL103_STEPS,
@@ -23,6 +25,7 @@ from .pipeline import (
     identify,
     overlay_digests,
     patch_rtd2142,
+    patch_rtd2142_sdr_fix_only,
     patch_vl103,
     sha256,
     toolchain_version,
@@ -238,6 +241,44 @@ def cmd_rtd_peek(args):
     return 0
 
 
+def cmd_rtd_clear_bits(args):
+    from . import rtddbg
+
+    try:
+        address, mask = int(args.address, 16), int(args.mask, 16)
+        rtddbg.check_clearable(address, mask)
+    except ValueError:
+        return error('address and mask must be hex, e.g. E362 02')
+    except rtddbg.DebugError as exc:
+        return error(exc)
+    if not args.volatile_ram_write:
+        return error(
+            'this writes chip RAM or a live register through the debug interface; pass --volatile-ram-write '
+            '(nothing is flashed; unplugging the hub undoes it)'
+        )
+    try:
+        transport = open_transport(args, address=rtddbg.DEBUG_ADDR)
+    except OSError as exc:
+        return error(exc)
+    print(f'transport: {transport.name}, debug interface at I2C {rtddbg.DEBUG_ADDR:#04x}')
+    print(
+        f'experimental volatile write: {address:04X} &= ~{mask:#04x} ({rtddbg.CLEARABLE[address][1]})'
+    )
+    try:
+        before, after = rtddbg.clear_bits(transport, address, mask)
+    except (OSError, rtddbg.DebugError) as exc:
+        return error(exc)
+    finally:
+        transport.close()
+    print(f'{address:04X}  before {before:#04x}  after {after:#04x}')
+    if not before & mask:
+        print('bits were already clear; nothing written')
+    elif after & mask:
+        print('note: the bits read back set again (the firmware may have re-set them)')
+    print('unplug the hub to restore its RAM')
+    return 0
+
+
 def cmd_rtd_flash(args):
     if not args.allow_brick:
         return error(
@@ -249,7 +290,11 @@ def cmd_rtd_flash(args):
         base = Path(args.base).read_bytes()
     except OSError as exc:
         return error(f'cannot read image: {exc.strerror or exc}')
-    known = {RTD2142_STOCK: 'RTD2142 stock', RTD2142_STEPS[-1][2]: 'RTD2142 patched'}
+    known = {
+        RTD2142_STOCK: 'RTD2142 stock',
+        RTD2142_STEPS[-1][2]: 'RTD2142 patched',
+        RTD2142_SDR_FIX_STEPS[-1][2]: RTD2142_SDR_FIX_LABEL,
+    }
     if platform.system() == 'Darwin' and args.bus is None:
         print(
             'warning: macOS writes go through the private IOAVService I2C API. The tool '
@@ -388,6 +433,13 @@ def main(argv=None):
             metavar='JSON',
             help='also write a per-step record of every changed byte (must not exist)',
         )
+        if name == 'rtd2142':
+            p.add_argument(
+                '--sdr-fix',
+                action='store_true',
+                help='build the HDR -> SDR fix candidate from stock instead of the BT.2020 '
+                'patch (not yet tested on a hub)',
+            )
     p = sub.add_parser('identify', help='report whether files are known stock/patched images')
     p.add_argument('files', nargs='+')
     sub.add_parser('doctor', help='check SDCC and that it assembles the patches as expected')
@@ -444,6 +496,15 @@ def main(argv=None):
     )
     add_transport_args(p, reset=False)
     p = sub.add_parser(
+        'rtd-clear-bits',
+        help='experiment: clear allow-listed RAM bits over the 0x35 debug interface '
+        '(volatile; never flash)',
+    )
+    p.add_argument('address', metavar='ADDR', help='hex XDATA address (allow-listed: E362, 5B07)')
+    p.add_argument('mask', metavar='MASK', help='hex bits to clear (E362: 02, 5B07: F0)')
+    p.add_argument('--volatile-ram-write', action='store_true')
+    add_transport_args(p, reset=False)
+    p = sub.add_parser(
         'survey',
         help='research: list RTD2142 code touching DP/HDMI '
         'colorimetry and VRR registers (read-only)',
@@ -453,7 +514,7 @@ def main(argv=None):
     if args.command == 'vl103':
         return cmd_patch(args, patch_vl103)
     if args.command == 'rtd2142':
-        return cmd_patch(args, patch_rtd2142)
+        return cmd_patch(args, patch_rtd2142_sdr_fix_only if args.sdr_fix else patch_rtd2142)
     if args.command == 'doctor':
         return cmd_doctor()
     if args.command == 'find-aux':
@@ -482,6 +543,8 @@ def main(argv=None):
         return cmd_rtd_flash(args)
     if args.command == 'rtd-peek':
         return cmd_rtd_peek(args)
+    if args.command == 'rtd-clear-bits':
+        return cmd_rtd_clear_bits(args)
     if args.command == 'survey':
         return cmd_survey(args)
     return cmd_identify(args)
