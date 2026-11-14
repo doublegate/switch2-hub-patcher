@@ -22,6 +22,9 @@ All notable changes to this project are documented here. The format follows
 - Antigravity CLI (`agy`) gets the Master-Claude core through the `master-claude` agy plugin
   (Master-Claude `mc-agy.sh`). This project's `AGENTS.md` is 5.6 KB, well under agy's
   24,000-byte rule-file cap.
+- CI pins `markdownlint-cli2` 0.24.0 (was 0.18.1). The old pin predated rule MD060, so a
+  newer local binary reported 32 table findings that CI never gated; the five affected
+  table separator rows in `README.md` and `research/DP_HDR_AND_VRR.md` are now spaced.
 
 ## [1.1.0] - 2026-11-13
 

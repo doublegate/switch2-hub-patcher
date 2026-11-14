@@ -35,7 +35,7 @@ story: <https://blog.nozomi.space/posts/sw2_dock/>.
 ## What it does
 
 | Chip | Patch | Effect |
-|---|---|---|
+| --- | --- | --- |
 | VIA **VL103** (USB-PD controller) | Nintendo SVID, modes and vendor-message replies; the official dock's PD3 identity; 15 V / 2.8 A power offer; version-query replies | Switch 2 enters **TV mode** and docks without the ~3 s pause |
 | Realtek **RTD2142** (DP→HDMI converter) | HDMI AVI InfoFrame marked BT.2020 whenever PQ/HLG HDR metadata is present; refreshed when HDR turns on or off | **HDR no longer washed out** on the hub's HDMI port |
 
@@ -65,7 +65,7 @@ models may use different chips or firmware, even from Cable Matters. For example
 images and refuses anything else:
 
 | Image | Size | Stock SHA-256 | Patched SHA-256 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | VL103 PD firmware 10.48.3.22 | 32 KiB | `3763c9f3ed64316dc2faeb94dfe14dfb18da4fb1589298740a27979f3737cff3` | `6b5b0eff3e72be89b1b226739face9194f2ec30812b8c1fda5346cae90f4888e` |
 | RTD2142 flash | 2 MiB | `17eea7286255892698066e0b46085dcb5a42855f9797f067041c2ee45104d802` | `f242d130c7a0947f75bc673eb6100160c3cdb8e1d2f5cb9d1a5dca5332a742f1` |
 
@@ -202,7 +202,7 @@ checked the bus. To restore, write your own stock dumps back the same way
 ## Command reference
 
 | Command | Touches hardware | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `vl103 IN OUT [--manifest JSON]` | no | Patch a VL103 dump (six hash-locked steps) |
 | `rtd2142 IN OUT [--manifest JSON]` | no | Patch an RTD2142 dump |
 | `identify FILE…` | no | Stock / patched / partly patched / unknown, with SHA-256 |

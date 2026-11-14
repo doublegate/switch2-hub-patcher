@@ -26,7 +26,7 @@ DPCD `0x2210` bit 3 (VSC SDP colorimetry supported).
 ### Registers (RTD2172 DP 1.2 TX0, pages 4D/4E; TX1 is BB/BC at the same offsets)
 
 | Addr | Name | Use |
-|---|---|---|
+| --- | --- | --- |
 | 4DB4 | MSA_CTRL | bit 7 `msa_db`: latch new MSA values |
 | 4DB5 | MSA_MISC0 | [7:5] bpc, [4] BT.601/709, [3] CEA range, [2:1] RGB/422/444 |
 | 4DB6 | MN_STRM_ATTR_MISC1 | bit 6 `pixel_fmt_indi`: colorimetry is in the VSC SDP |
@@ -92,7 +92,7 @@ frame, which is the "clock re-lock loop" upstream suspected.
 The silicon does have a VRR mode:
 
 | Addr (stream 1; ST2 B3xx, ST3 B5xx, ST4 B8xx) | Name | Field |
-|---|---|---|
+| --- | --- | --- |
 | B130 | DPF_CTRL_0 | bit 5 `frame_sync_mode`, bit 4 `deonly_mode` |
 | B190 | DP_RSV0 | bit 0 `drr_mode`: VS just before the first DE line |
 | B191 | DP_RSV1 | bit 7 `deonly_full_mode` (after FIFO/tracking stable), bit 6 `de_window_fix_en` |
