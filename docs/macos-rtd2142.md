@@ -43,7 +43,8 @@ python3 -m switch2_hub_patcher identify rtd2142-stock.bin
 
 - `N` is the external display path index that `find-aux --probe` reports for the
   Realtek ISP (default 0).
-- `rtd-probe` must show the XT25F16B flash ID `0b4015` with block protection off.
+- `rtd-probe` must print `flash ID 0b4015 (XT25F16B)` and a `status register` line
+  without `block protection set` after it.
 - The monitor may blank briefly while the chip is in ISP mode; the tool resets the
   hub MCU when it is done.
 - `rtd-dump` reads the full 2 MiB twice and requires both reads to match. macOS
