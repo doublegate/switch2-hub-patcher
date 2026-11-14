@@ -54,9 +54,37 @@ All notable changes to this project are documented here. The format follows
 - `.gitignore` covers the research by-products that are derived from vendor firmware or
   tools: Ghidra projects and exports (`*.gpr`, `*.rep/`, `*.gzf`, lock files), the
   decoded register label tables and the RTD2172 DB's `ReadAll.txt`.
+- RTD2142 **HDR-to-SDR fix candidate** (`rtd2142 --sdr-fix`, `patch_rtd2142_sdr_fix.py`,
+  output `f191da0f…8e92`, not yet tested on a hub). Root cause, read on a live chip:
+  after the source switches from HDR to SDR, the stock firmware keeps the VSC SDP's
+  BT.2020 colorimetry. The source has cleared MSA MISC1 bit 6, so MISC0 should be
+  authoritative (DP 1.4a Table 2-96), but the format check compares only the pixel
+  encoding. The HDMI AVI InfoFrame therefore keeps saying BT.2020 over SDR video, and
+  the TV keeps re-detecting. The candidate makes that check report a change (bank 5
+  `C476` → `FD80`), so the firmware re-captures from MISC0. It also clears the stale
+  HDMI colour depth (5B07) on the 8-bit path (bank 2 `E952` → `FF00`). Hash-locked like
+  the other patches: original hook bytes, erased overlay space and the exact footprint
+  (36 bytes, 4 sectors) are checked. Offline tests use a synthetic image and the real
+  dump, and a simulated flash. `identify` and `rtd-flash` know the image.
+- `rtd-clear-bits ADDR MASK --volatile-ram-write`: clears allow-listed bits (`E362`
+  bit 1, `5B07[7:4]`) through the debug interface, for experiments. It never writes
+  flash, and unplugging the hub undoes it. The write path (`0x03` sets the data byte,
+  `0x3B` writes it) was checked in the firmware's dispatch table before first use.
+- Research: section 5 of `research/DP_HDR_AND_VRR.md` (the HDR-to-SDR loop, with live
+  register tables); the live stream is DP RX stream 2, whose VRR hook is bank 5 `94CC`
+  (`dprx2_program_dpf_timing`, `92F2`). About 60 new names in
+  `research/rtd2142_symbols.tsv`: the debug command handlers, DP RX HDR status and
+  metadata cache, the HDMI packet engine, HDMI deep colour, and stream-2 format and
+  colorimetry.
 
 ### Changed
 
+- README: the RTD2142 BT.2020 patch's effect is no longer stated as fact. Upstream
+  validated it in a simulator; on one hub HDR from a Mac looked right, but a Switch 2
+  gave no HDMI picture, so the hub was rolled back to stock (recorded in the
+  system-version table). The HDR-to-SDR loop is listed under "Not fixed".
+- `rtd-peek` works on a real chip (self-check `FF23 = 0x6A`; about 150 registers in
+  4.6 s with the picture running).
 - `AGENTS.md` re-synced with Master-Claude, which now writes home-relative `@~/` imports
   itself ([Master-Claude#33](https://github.com/doublegate/Master-Claude/pull/33)). The
   hand-written header note about the imports is gone because it is redundant. The notes in

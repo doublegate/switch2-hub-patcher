@@ -37,7 +37,7 @@ story: <https://blog.nozomi.space/posts/sw2_dock/>.
 | Chip | Patch | Effect |
 | --- | --- | --- |
 | VIA **VL103** (USB-PD controller) | Nintendo SVID, modes and vendor-message replies; the official dock's PD3 identity; 15 V / 2.8 A power offer; version-query replies | Switch 2 enters **TV mode** and docks without the ~3 s pause |
-| Realtek **RTD2142** (DP→HDMI converter) | HDMI AVI InfoFrame marked BT.2020 whenever PQ/HLG HDR metadata is present; refreshed when HDR turns on or off | **HDR no longer washed out** on the hub's HDMI port |
+| Realtek **RTD2142** (DP→HDMI converter) | HDMI AVI InfoFrame marked BT.2020 whenever PQ/HLG HDR metadata is present; refreshed when HDR turns on or off | Intended: **HDR no longer washed out** on the hub's HDMI port. Upstream validated it in a simulator only. On one hub (2026-11-14) HDR from a Mac looked right, but a Switch 2 gave **no HDMI picture** with HDR on or off, so the hub was rolled back to stock; see the system-version table |
 
 Not fixed, and things to avoid:
 
@@ -48,6 +48,12 @@ Not fixed, and things to avoid:
   hub. The hub only replays the official dock's version records. It has no update
   handler, and what the console does on that path is untested.
 - **HDR through the hub's DisplayPort port** is still washed out or not offered. See
+  [Research](#research-dp-port-hdr-and-vrr).
+- **HDR to SDR switching (stock RTD2142 bug).** After a source switches from HDR to SDR
+  while connected (for example macOS turning HDR off), the TV can keep re-detecting the
+  signal (SDR, HDR, HLG in turn) until the hub is replugged. The stock firmware keeps
+  the HDR colorimetry (BT.2020) after the source has moved back to SDR. A fix
+  candidate, `rtd2142 --sdr-fix`, is built and tested offline but not yet on a hub; see
   [Research](#research-dp-port-hdr-and-vrr).
 - The power patch lowers the hub's own power reserve from 7 W to 3 W. Keep
   power-hungry USB devices off the hub while docked.
@@ -68,6 +74,7 @@ images and refuses anything else:
 | --- | --- | --- | --- |
 | VL103 PD firmware 10.48.3.22 | 32 KiB | `3763c9f3ed64316dc2faeb94dfe14dfb18da4fb1589298740a27979f3737cff3` | `6b5b0eff3e72be89b1b226739face9194f2ec30812b8c1fda5346cae90f4888e` |
 | RTD2142 flash | 2 MiB | `17eea7286255892698066e0b46085dcb5a42855f9797f067041c2ee45104d802` | `f242d130c7a0947f75bc673eb6100160c3cdb8e1d2f5cb9d1a5dca5332a742f1` |
+| RTD2142 flash, SDR-fix candidate (`--sdr-fix`, not yet tested on a hub) | 2 MiB | same | `f191da0f7201fe26c9f9924b11a7f486ce18faa305c145b806cb0f251e518e92` |
 
 If your dump has a different hash, your hub has different firmware and these patches
 don't apply. Please don't force them.
@@ -80,6 +87,7 @@ video on many third-party docks, and 23.0.0 added docked VRR. Results recorded s
 | System version | Hub state | Result |
 | --- | --- | --- |
 | 23.0.1 | VL103 patched (`6b5b0eff…888e`), RTD2142 stock | Works: enters TV mode; docking delay roughly halved (about 1.5 s, judged by eye); HDMI picture good, HDR still somewhat washed out as expected with the RTD2142 stock. Tested with VRR off, no Dock Update, no USB devices on the hub |
+| Same console, 2026-11-14 | VL103 patched, RTD2142 patched (`f242d130…42f1`) | **No HDMI picture** with the Switch's HDR setting on or off: the TV detected a signal but showed nothing. Under investigation; the RTD2142 was flashed back to stock. HDR from a Mac through the same hub looked right |
 
 Before you accept a console update, check here, and keep your stock dumps so you can
 roll the hub back.
@@ -218,7 +226,7 @@ checked the bus. To restore, write your own stock dumps back the same way
 | Command | Touches hardware | Purpose |
 | --- | --- | --- |
 | `vl103 IN OUT [--manifest JSON]` | no | Patch a VL103 dump (six hash-locked steps) |
-| `rtd2142 IN OUT [--manifest JSON]` | no | Patch an RTD2142 dump |
+| `rtd2142 IN OUT [--manifest JSON] [--sdr-fix]` | no | Patch an RTD2142 dump; `--sdr-fix` builds the HDR-to-SDR fix candidate from stock instead |
 | `identify FILE…` | no | Stock / patched / partly patched / unknown, with SHA-256 |
 | `doctor` | no | SDCC present, and assembling to the 4.6.0 reference output |
 | `status` | read-only | Readiness checklist and the next step |
@@ -231,6 +239,7 @@ checked the bus. To restore, write your own stock dumps back the same way
 | `rtd-dump OUT [--reads N]` | read | Whole 2 MiB flash; N reads must agree (default 2) |
 | `rtd-flash TARGET --base BASE --allow-brick` | **write** | Rewrite only the changed 4 KiB sectors, verified |
 | `rtd-peek ADDR…` | read | Experimental: live XDATA registers over the firmware's 0x35 debug interface; self-checks first, no write commands |
+| `rtd-clear-bits ADDR MASK --volatile-ram-write` | RAM | Experiment: clears allow-listed bits (E362 bit 1, 5B07[7:4]) over the debug interface; never flash, undone by unplugging |
 | `survey DUMP` | no | Research: code that touches DP/HDMI colorimetry and VRR registers |
 
 The `rtd-*` commands take `--bus N` (Linux), `--mac-service N` (macOS), `--chunk
@@ -318,8 +327,13 @@ It is not part of the patch pipeline.
   takes only for "extended" input colorimetry. The likely DP-port fix is a hook at
   that gate. For VRR, the receiver runs in full-last-line mode and never enables the
   hardware VRR mode; the fix order is in the notes. The 0x35 live-register debug
-  protocol is decoded, and the read-only `rtd-peek` uses it (untested on a chip).
+  protocol is decoded, and `rtd-peek` uses it. It works on a real chip.
   `research/ghidra/` and `research/rtd2142_symbols.tsv` reproduce the analysis.
+- **Live reads (2026-11-14):** the hub's input is DP RX stream 2, not stream 1. The
+  HDR-to-SDR re-detect loop is the stock firmware keeping the VSC SDP's BT.2020
+  colorimetry after the source clears MSA MISC1 bit 6 (DP 1.4a Table 2-96 makes MISC0
+  authoritative then), plus a stale 12-bit HDMI colour depth. `rtd2142 --sdr-fix`
+  addresses both.
 
 ## Credits
 
