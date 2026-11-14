@@ -57,3 +57,6 @@ htmlcov/
 # Local agent and session state (AGENTS.md / CLAUDE.md are tracked)
 CLAUDE.local.md
 *.mc-bak
+
+# Antigravity PR reviewer: large-diff on-disk handoff (transient, removed by the script).
+/.agy-review-work/
