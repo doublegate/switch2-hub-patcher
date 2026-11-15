@@ -722,6 +722,120 @@ Plan, after the BT.2020 and VRR work (section 2's order of work):
    HPD IRQ) when the console leaves sleep. Test it on a hub with the stock VL103 dump
    kept for rollback.
 
+## 7. BT.2020 on HDMI, reworked on SDR-fix v7b (candidate, 2026-11-14)
+
+**How the stock AVI builder sets colorimetry.** `hdmi_build_avi` (bank 2 `B9F6`)
+clears the payload, then `hdmi_avi_fill_fields` (`7D03`) fills it:
+
+- **Y:** taken from `E0E6[2:0]`, the output pixel encoding (0 RGB, 1 4:2:2, 2 4:4:4,
+  3 4:2:0). A0 is always set.
+- **C/EC when the input colorimetry class `E0E8[7:4]` is 0xD** (colorimetry carried in
+  the VSC SDP), mapped from the code in `E0E7[4:0]`:
+  - RGB: 3 → opRGB, 4 → EC 7, 6 → BT.2020 RGB (C 3, EC 6).
+  - YCbCr: jump table `7E1E`. 14 (0x0E) → BT.2020 YCC (EC 6), 13 → BT.2020 cYCC
+    (EC 5), 17 → EC 7, plus BT.601, BT.709, xvYCC, sYCC and opYCC.
+- **C/EC for any other class:** set from the class itself (8 → BT.709, 6 → BT.601,
+  9/10 → xvYCC). A YCbCr picture with no colorimetry gets C 2.
+
+`hdmi_build_avi` then picks version 4 and length 14 when C is 3 with EC 7, and
+otherwise version 2 (3 for VICs of 128 and up) and length 13. It copies the payload to
+the once-packet window: PB1 `5B4A`, PB2 `5B49`, PB3 `5B48`, checksum `5B4B` and PB14
+`5B5B`. That window is shared, so a live read usually shows the last packet written
+(often the Audio InfoFrame), not the AVI.
+
+So a source that puts BT.2020 in the VSC SDP already gets a correct AVI, as the Mac
+does (`E3E6` 0x0E). The washed-out case is a source that sends PQ or HLG metadata but
+leaves its colorimetry in MSA MISC0. MISC0 cannot express BT.2020, so the AVI says
+BT.709 or "no data". That is the Switch 2 case, according to the upstream write-up.
+
+**What the upstream patch got wrong for stacking:**
+
+- It forces EC 6 on every HDR AVI. That breaks a source's own extended colorimetry:
+  - a version-4 EC 7 AVI keeps its version and ACE but gets EC 6;
+  - BT.2020 cYCC (EC 5) becomes EC 6.
+- For RGB output it claims BT.2020 RGB whatever the sink supports. CTA-861 lets a source
+  send extended colorimetry only when the sink's Colorimetry Data Block lists it.
+  This TV lists BT2020_YCC only.
+- Its rebuild hooks sit on the HDR packet enable (`F31F`/`F326`), but v7b's
+  `hdmi_drm_enable_guard` already owns `F31F`.
+
+**What the sink EDID gives the firmware.** A full XDATA read on the live hub (C000 to
+FFFF) found three EDID buffers:
+
+- `C500`, PNP RTK (probably the hub's own);
+- `C600`, the TV's EDID: base block and first CTA extension, identical to the one
+  macOS reads;
+- `C700`, PNP RTK.
+
+`edid_buffer_load_q` (bank 0 `CEAF`) chooses between them by logical port. C600 is the
+HDMI connector's buffer. An overlay can therefore read the sink's Colorimetry Data
+Block without a DDC transfer.
+
+**The rework** (`asm/rtd2142_bt2020_avi.asm`, `patch_rtd2142_bt2020.py`):
+
+- **Where it goes:** a separate step on the v7b output, `rtd2142 --sdr-fix --bt2020`,
+  output `6cffad2e…06f4`. It changes bank 2 only: 200 bytes at `FF36`..`FFFD`, the last
+  free space above v7b's guard.
+- **Hooks:**
+  - `F390` `lcall avi_wrap`;
+  - `F31F` `ljmp drm_on`, which runs v7b's guard first;
+  - `F326` `ljmp drm_off`.
+- **`avi_wrap`** runs the stock build, then:
+  - **Leaves the AVI as built** when PB2 C is already 3, whatever the EC. It sets
+    `E9F1` = 2.
+  - **Marks the AVI BT.2020** (C 3 and EC 6, checksum corrected, flag 1) only when all
+    of these hold:
+    - the metadata is present (`E362` bit 1);
+    - the EOTF (`DD9F[2:0]`) is PQ or HLG;
+    - the C600 EDID has a CTA extension (tag 02);
+    - that extension holds a well-formed Colorimetry Data Block (extended tag 5) inside
+      the data-block collection;
+    - the block lists BT2020_RGB for RGB output, or BT2020_YCC for YCbCr output.
+  - **Leaves every other field unchanged**, including Y, Q, VIC, and M and R.
+- **`drm_on` / `drm_off`** re-decide on every `hdmi_drm_update` pass. They rebuild the
+  AVI with `hdmi_pkt_build` (builder 0, as the output start does) only when the
+  decision changes. That fixes the order problem at an output restart, where the AVI is
+  built before the new metadata is current. It also clears BT.2020 again when HDR stops.
+- **Tests** (`tests/test_bt2020.py`) execute the assembled bytes in a small 8051
+  interpreter (`tests/sim8051.py`), with the stock routines modelled. They cover:
+  - every encoding against RGB-only, YCC-only and both-flag sinks;
+  - PQ, HLG, SDR, a reserved EOTF and missing metadata;
+  - extended AVIs left alone, including version-4 EC 7;
+  - missing, short, overrunning and malformed EDID blocks;
+  - a block found after other data blocks;
+  - the rebuild-only-on-change sequence.
+  - Run against this TV's real EDID (locally, not committed): RGB gets nothing; 4:4:4
+    and 4:2:0 get C 3 / EC 6.
+
+**What the Switch 2 sends.** No HDMI analyzer capture is public. TV information screens
+quoted by users show:
+
+- RGB 10-bit over FRL for 4K60 and 1440p120 HDR on HDMI 2.1 TVs (LG C1/CX);
+- RGB 8-bit for 4K60 SDR;
+- YCbCr 4:2:0 for 4K60 HDR on 18 Gbps (HDMI 2.0) sinks;
+- on some TVs, HDR forced to 1080p.
+
+The official dock's AVI is reported as BT.709 for SDR and BT.2020 for HDR. Nobody has
+linked the Switch's choice to the Colorimetry Data Block, and nothing public shows its
+DisplayPort-side MISC0/VSC use.
+
+This TV is an 18 Gbps sink with 4:2:0 deep colour, so 4:2:0 is likely, and the rework
+would then mark it BT.2020. If the Switch sends RGB to it instead, the rework claims
+nothing and HDR stays washed out, but the picture stays up. That is the trade-off of
+never claiming BT.2020 RGB to a YCC-only sink.
+
+The Switch's own Dock Output Information screen shows only resolution, refresh rate and
+HDR, so the TV's signal information screen is the way to see the encoding.
+
+**Test plan** (needs a flash from v7b, about 18 minutes, with stock and v7b kept for
+rollback):
+
+1. Mac: HDR and SDR switching, and a 20-switch soak. The VSC path means the AVI should
+   be untouched, so expect v7b behaviour.
+2. Switch 2 with a charger: SDR, HDR, switching, and an input change. Note the TV's
+   signal information (encoding and colorimetry) and whether HDR still looks washed out.
+3. If possible, a TV that lists BT2020_RGB.
+
 ## Sources
 
 - Upstream write-up: <https://blog.nozomi.space/posts/sw2_dock/>
@@ -740,3 +854,15 @@ Plan, after the BT.2020 and VRR work (section 2's order of work):
   <https://www.notebookcheck.net/Nintendo-Switch-2-VRR-support-could-be-in-the-works.1339818.0.html>
 - Docked VRR at launch limited to one title:
   <https://shattered.io/switch-2-firmware-23-0-0-vrr-update-2026/>
+- Switch 2 output formats from TV information screens (RGB 10b FRL for HDR on HDMI 2.1,
+  4:2:0 on 18 Gbps sinks):
+  <https://famiboards.com/threads/looks-like-switch-2-docked-mode-output-may-be-soft-limited-to-24gbps-also-lg-c1-tv-not-allowing-1440p-output.13970/>,
+  <https://maxfrequency.net/2025/06/13/switch-2-video-hdr-issues/>,
+  <https://famiboards.com/threads/switch-2-hdr-calibration-can-be-misleading-%E2%80%94-hdtvtest-video.14135/page-2>,
+  <https://www.jeuxvideo.com/forums/42-3021761-75923533-1-0-1-0-sur-tv-hdmi-2-0-yuv-422-ou-420.htm>,
+  <https://pc.watch.impress.co.jp/docs/topic/special/2038638.html>,
+  <https://www.resetera.com/threads/switch-2-forcing-1080p-when-hdr-is-enabled.1208931/>
+- Official dock colorimetry (BT.709 SDR, BT.2020 HDR) and cheap docks getting it wrong:
+  <https://www.resetera.com/threads/the-search-for-a-working-third-party-switch-2-dock.1209480/page-4>
+- Dock Output Information shows resolution, refresh rate and HDR only:
+  <https://en-americas-support.nintendo.com/app/answers/detail/a_id/68188>

@@ -158,7 +158,7 @@
 2	CODE	4597	set_hi_nibble	@DPTR = (@DPTR & 0F) | A
 2	CODE	47e9	set_bit0_at_dptr
 2	CODE	4af5	set_bit3_at_dptr
-*	EXTMEM	e0e6	hdmi_in_fmt	[7:3] input bits per colour (8, 10, 12)
+*	EXTMEM	e0e6	hdmi_in_fmt	[7:3] input bits per colour (8, 10, 12); [2:0] pixel encoding written to AVI Y (0 RGB, 1 4:2:2, 2 4:4:4, 3 4:2:0), read by hdmi_out_encoding_q
 *	EXTMEM	e0e7	hdmi_in_colorimetry_q	[4:0] colorimetry code from the RX format query (field 8), [6:5] field 7; keeps 0E after HDR -> SDR
 #
 # --- DP RX stream 2 (the hub's input) format and colorimetry, bank 5 ---
@@ -268,3 +268,17 @@
 *	EXTMEM	5bb2	hdmi_hdcp22_ks_q	session key enc_ks, 5BB2..5BC2 (riv at 5BD3..5BDA)
 1	CODE	d72f	hdcp_downstream_authed_q	repeater check: returns early unless the downstream HDCP state is authenticated (D943 / D872 state 10, or HDCP 1.4 state 4 at E315); reached by indirect call
 1	CODE	d83c	hdcp_downstream_idle_q	repeater check: the same, for downstream state 0 (not authenticating); reached by indirect call
+0	CODE	ceaf	edid_buffer_load_q	per port (CCFD): 0 -> EDID buffer C500, 1 -> C600, 2/3 -> C700, then the bank 3 copy (F9CC via stub 1B9A); C600 holds the HDMI sink's EDID (256 bytes, matched byte for byte on a live chip)
+2	CODE	7d03	hdmi_avi_fill_fields	AVI PB1..: Y = E0E6[2:0] (<<5) with A0, then C/EC: class E0E8[7:4] = 0xD (VSC colorimetry) -> from code E0E7[4:0] (RGB: 3 opRGB, 4 EC 7, 6 BT.2020 RGB; YCbCr: table at 7E1E), else from the class (8 BT.709, 6 BT.601, 9/10 xvYCC); YCbCr with no colorimetry -> C = 2
+2	CODE	7e07	hdmi_avi_ycc_ext_colorimetry	YCbCr + VSC colorimetry: jump table 7E1E on E0E7[4:0] - 7: 7 BT.601, 8 BT.709, 9 xvYCC601, 10 xvYCC709, 11 sYCC601, 12 opYCC601, 13 BT.2020 cYCC (EC 5), 14 BT.2020 YCC (EC 6), 17 EC 7
+2	CODE	403a	hdmi_avi_set_c_extended	PB2 (payload pointer CD12..CD14 + 1) |= C0 (C = 3), A = PB3 next
+2	CODE	4052	hdmi_avi_payload_ptr	R3:R2:R1 = generic pointer at CD12 (the AVI payload, CD02)
+2	CODE	41ec	hdmi_out_encoding_q	A = E0E6 & 7 (pixel encoding for AVI Y)
+2	CODE	ff36	avi_wrap	BT.2020 rework overlay (not stock): after hdmi_build_avi, C = 3 / EC = 6 for PQ/HLG when the AVI is not already extended and the sink EDID lists BT.2020 for the encoding
+2	CODE	ff72	drm_on	BT.2020 rework overlay (not stock): v7b HDR packet guard, then re-decide BT.2020 and rebuild the AVI on a change
+2	CODE	ff77	drm_off	BT.2020 rework overlay (not stock): HDR packet off (stock), then re-decide BT.2020
+*	EXTMEM	e0e8	hdmi_in_colorimetry_class	[7:4] input colorimetry class (0xD = extended, code in E0E7[4:0]); [3:0] read by 42AA into the AVI
+*	EXTMEM	c500	edid_buf_port0	EDID buffer, logical port 0 (256 bytes; an EDID with PNP RTK, likely the hub's own)
+*	EXTMEM	c600	edid_buf_hdmi	EDID buffer, logical port 1: the HDMI sink's EDID (base block + first extension)
+*	EXTMEM	c700	edid_buf_port2	EDID buffer, logical ports 2/3 (PNP RTK)
+*	EXTMEM	e9f1	bt2020_avi_flag	BT.2020 rework (not stock; unreferenced by the stock firmware): bit 0 AVI marked BT.2020, bit 1 AVI built extended
