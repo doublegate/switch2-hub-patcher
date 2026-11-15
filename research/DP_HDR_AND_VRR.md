@@ -557,6 +557,126 @@ see the vc4 driver fix "Always enable GCP with AVMUTE cleared"
 the 8-bit branch take the GCP-on path (`FA18` → `SJMP FA24`). The GCP colour depth is
 0 ("not indicated") in 8-bit, because `5B07` is cleared there since v1.
 
+**v6 on the hub and candidate v6b.** v6 had the GCP on in SDR (5B09 `8D`, Clear_AVMUTE
+set; everything else correct), but the TV cycled in SDR from the first switch and even
+from a fresh plug-in. 5B07[7:4] is the GCP's colour depth (CD). The stock firmware
+writes bpc/2 there, which is the HDMI CD encoding (5 = 30 bpp, 6 = 36 bpp). v1's fix
+cleared it for 8-bit, so v6 sent CD = 0, "colour depth not indicated", which is meant only
+for sinks without deep colour. This TV supports deep colour, so for 8-bit it should get
+CD = 4 (24 bpp). v6b's colour-depth overlay sets 5B07[7:4] to 4 in 8-bit mode (`FF0B`:
+`ORL A,#40`). The packer stays off (5B06 bit 1 = 0).
+
+**v6b on the hub: HDCP 2.2 out of step.** v6b fixed SDR recovery: a TV power cycle and
+an input switch each came back twice out of two. In an HDR/SDR soak about half the
+switches to SDR still failed, in a new way: a black screen, with the SDR, HDR and HLG
+banners cycling at random (under a second each), and no recovery. Every register the
+earlier versions fixed read correctly in the failed state:
+
+- AVI, GCP and colour depth were correct.
+- The HDR packet was off.
+- Scrambling was on (E0D9 `01`).
+- 5AD8 and B430 differed between good and bad landings, but those differences were
+  ruled out.
+- SDR at 4K30 (297 MHz, below the scrambling threshold) still cycled, so scrambling and
+  the TMDS rate are not the cause.
+- HDR goes out as YCbCr 4:2:0 12-bit at 445.5 MHz (E0E3:E0E4 `1166`), and SDR as RGB
+  4:4:4 8-bit at 594 MHz.
+
+What was left is HDCP. The Mac authenticates to the hub over DP (0B20 `51`:
+authentication done, encryption on), and the hub re-encrypts to the TV (5B0A bit 7)
+with its own HDCP 2.2 transmitter:
+
+- Bank 4 `hdmi_hdcp22_tx_dispatch` (`4C50`, jump table `4C86`) runs the transmitter on
+  D943[3:0], which `FAFC` writes as state | 0x10 ("changed").
+- State 1 (`4DBF`) reads HDCP2Version and starts AKE_Init.
+- State 10 (`507E`) is authenticated. Every 200 ms it reads the TV's RxStatus (`EBEC`)
+  and starts over only on REAUTH_REQ, counting in E0DE.
+- In the failed state E0DE stayed `00`: the TV never asked to re-authenticate.
+- DDC passthrough forwards only EDID (0x50), not SCDC (0x54) or HDCP (0x3A), so the Mac
+  cannot see or fix the TV's HDCP state.
+
+The reading: after an output restart the hub authenticates while the TV is still
+locking to the new signal. On some restarts the TV ends up with a cipher out of step
+with the hub's. It can't decrypt, keeps re-detecting, and never reports it.
+
+The manual test used `rtd-set-bits D943 11` and then `rtd-clear-bits D943 0A`. The two
+writes moved the state machine from 10 to 1 (`6A` → `7B` → `71`), so the firmware ran a
+fresh authentication with encryption kept on. The cycling TV recovered both times. A
+D943-only allowlist entry was added for the test, after review. Turning HDCP off is not
+an option: it would make the hub an HDCP stripper, so every fix keeps HDCP on.
+
+**v7 and v7b: one re-authentication per authentication.** No register shows the TV's
+cipher state, so the fix re-authenticates once, unconditionally, after every
+authentication the firmware starts. The overlay is bank 4 `FF00`, hooked at state
+10's poll (`5098`) and at state 1's entry (`4DC5`). The re-authentication runs
+10 × 200 ms after state 10 is first reached. One XDATA byte, E9F0, holds the state;
+the stock firmware never references it and it is 0 at power-up:
+
+- bit 7: done;
+- bit 6: our re-authentication is in progress;
+- [3:0]: ticks.
+
+v7 cleared bit 6 at state 1's entry, which went wrong:
+
+- The first attempt after the forced state 1 usually fails.
+- The firmware retries it through state 1, via E0DE + 1 at `6ACD`.
+- That retry re-armed the one-shot, so v7 re-authenticated every ~2.7 s.
+
+v7b keeps bit 6 until state 10 is reached again. In a 20-switch soak it logged the same
+on every switch:
+
+- E9F0 re-armed to `00`;
+- the ticks counted to 9;
+- one re-authentication fired (`C0`, then the firmware's retry);
+- E9F0 settled at `80`, with D943 `6A` and 5B0A `80`.
+
+Scrambling held throughout (E0D9 `01`, E0AD at most 5). On the TV every SDR landing was
+stable, with one brief blink about 2 s after each switch, which is the
+re-authentication. A recovery test without HDR toggling, a TV power cycle and an input
+switch twice each, came back every time.
+
+**v7b with copy-protected video and with a Switch 2.** The hub reports its downstream
+HDCP state upstream (repeater checks in bank 1, `D72F`/`D83C`, test D943 for state 10
+or 0). So a forced re-authentication could look like a downstream fault to a source
+that encrypts, and each upstream restart would re-arm the one-shot. Five minutes of a
+4K Apple TV film from the Mac, which turns on HDCP upstream, ruled that out: D943 stayed
+`6A`, E0DE stayed 1, E9F0 stayed `80`, and nothing blinked. One weakness did show up.
+After a plug-in the firmware authenticated twice, 13 s apart, and each time v7b
+re-armed and fired, giving two blinks. A limit of one forced re-authentication per time
+window would remove the second one. It isn't built, because that second authentication
+was a full restart (state 0, E0DE reset), where a desync is possible. A Switch 2 on v7b,
+with a charger in the hub's power port, works in SDR and HDR, through switches between
+them and TV input changes. Without a charger it stayed in handheld mode (see section 6).
+
+What the hub can learn about the TV: the EDID, which it reads itself (`E898`, DDC
+0xA0) for its sink-quirk table (E10B/E10C; this TV matches no entry, E10B `00`), and
+which DDC passthrough forwards to the source. The SCDC and HDCP status it reads
+reaches only its own registers (E0D9, D943, E0DE), readable with `rtd-peek`. The chip
+has a CEC controller (`CEC1_CR0_*`, 58A0), but the stock firmware never touches it.
+
+This TV's EDID:
+
+- HF-VSDB: 600 MHz, SCDC, and scrambling below 340 MHz.
+- 4:2:0 deep colour at 10 and 12 bit, which is why the Mac sends HDR as 4:2:0 12-bit.
+- HDR static metadata: PQ and HLG. There is also an HDR10+ block (OUI 90848B).
+- Colorimetry block: **BT.2020 YCC only, not BT.2020 RGB**.
+- No Video Capability Data Block, so there is no selectable RGB quantization range.
+  Sources must assume the default range, limited for CE modes such as 4K60.
+- `edid-decode` marks the EDID as failing conformity: no VCDB, and an image size that
+  doesn't match the display size. It also warns that the sRGB colorimetry bit is not
+  set.
+
+That last point matters for the BT.2020 AVI patch. An AVI that signals BT.2020 over
+RGB claims a format this TV does not list. That is a possible explanation for the
+Switch 2's no-picture result with that patch, if the Switch sends RGB. Not yet checked.
+
+Two ways could reduce the blink, and neither is done:
+
+- Re-authenticate sooner, so the blink merges with the TV's own mode-change blank. The
+  risk is hitting the same re-lock window.
+- Delay the first authentication until the TV has locked, and drop the forced one. This
+  needs a reliable lock signal, and it has no safety net.
+
 **The BT.2020 patch (`rtd2142_hdr_avi`) and this bug.** Its AVI rebuild hooks fire only
 when the HDR packet's enable bit changes, but an output restart enables every packet
 at once (`hdmi_pkt_enable_all`, `CDAA`), and the AVI is built before the new HDR
@@ -567,6 +687,40 @@ worked in SDR and HDR. The first connection needed several replugs and SDR/HDR t
 then it was stable, and the next replug came up at once. That points at the BT.2020
 overlay (or its interaction with the Switch's signalling) for the no-picture result.
 Not yet explained in the code; the patch should not be used until it is.
+
+## 6. Switch 2 sleep and wake (VL103, planned)
+
+What happens on one hub (2026-11-14), with VL103 patched, RTD2142 SDR-fix v7b, and a
+100 W charger in the hub's power port:
+
+- Docking, SDR/HDR switching and TV input changes work.
+- Waking a docked Switch from sleep with a controller often gives no picture.
+- Undocking it during sleep, docking it again and pressing the console's power button
+  recovers every time.
+- Without a charger the Switch stays in handheld mode. The patch offers 15 V, which
+  only a charger can supply.
+
+A redock starts over: a new USB-PD contract, DisplayPort alt-mode entry, and a hot-plug
+(HPD) report. A wake keeps the contract and the alt mode, so the Switch relies on the
+hub's DisplayPort status for the display. In USB-C DP alt mode, HPD travels as PD
+messages (DisplayPort Status Update and Attention, with HPD-level and HPD-IRQ bits)
+from the VL103, not on a wire. A suspect, unverified: after a wake the VL103 doesn't
+report HPD again, or doesn't send an HPD IRQ, so the Switch never retrains the link.
+Ruled out so far: power, and most likely the RTD2142's HDMI side, since input changes
+(which restart its output) recover.
+
+Plan, after the BT.2020 and VRR work (section 2's order of work):
+
+1. Capture the PD traffic of a working redock and a failed wake. Use a USB-PD
+   analyser, or a Linux host with `typec` / `ucsi` tracing as the Switch's stand-in.
+2. In the VL103 stock and patched images, find the DisplayPort Status and Attention
+   handlers, what sets the HPD bits, and whether the patch's vendor-message replies
+   change the path the console takes on wake.
+3. Compare with the official dock's PD behaviour (switchbrew and the upstream write-up)
+   on wake.
+4. Only then a candidate: a hash-guarded VL103 step that re-asserts HPD (or sends an
+   HPD IRQ) when the console leaves sleep. Test it on a hub with the stock VL103 dump
+   kept for rollback.
 
 ## Sources
 

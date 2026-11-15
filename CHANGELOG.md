@@ -55,7 +55,12 @@ All notable changes to this project are documented here. The format follows
   tools: Ghidra projects and exports (`*.gpr`, `*.rep/`, `*.gzf`, lock files), the
   decoded register label tables and the RTD2172 DB's `ReadAll.txt`.
 - RTD2142 **HDR-to-SDR fix candidate** (`rtd2142 --sdr-fix`, `patch_rtd2142_sdr_fix.py`,
-  v6 output `3a56a3aa…fd62`, not yet tested on a hub). Root cause, read on a live chip:
+  v7b output `4a39d095…bfd24`; a 20-switch Mac HDR/SDR soak on one hub landed every
+  switch with no cycling, one brief blink each, and a TV power cycle and an input switch
+  each recovered twice out of two; a Switch 2 on it works in SDR and HDR, including
+  switching and TV input changes, with a charger in the hub's power port; 5 minutes of
+  copy-protected 4K playback from a Mac stayed authenticated with no extra
+  re-authentication). Root cause, read on a live chip:
   in HDR the source carries colorimetry in the VSC SDP (MSA MISC1 bit 6 set) and the
   stock firmware stores a BT.2020 code in E3E6. Only that path ever writes the code, so
   after a switch to SDR (MISC1 bit 6 clear, MISC0 = BT.709; DP 1.4a Table 2-96) the HDMI
@@ -86,21 +91,45 @@ All notable changes to this project are documented here. The format follows
     to come back 2 times out of 3, while HDR (GCP on) always did. Now every mode gets
     the GCP with Clear_AVMUTE, as the Raspberry Pi HDMI driver also does ("Always enable
     GCP with AVMUTE cleared").
+  - GCP colour depth (v6b): in 8-bit mode the colour-depth overlay (`FF00`) now sets
+    5B07[7:4], which is also the GCP's CD field, to 4 (24 bpp) instead of 0 ("not
+    indicated"). The stock firmware writes bpc/2 there, i.e. the HDMI CD code (5, 6).
+    CD = 0 is meant for sinks without deep colour. With v6 (GCP on, CD 0) this
+    deep-colour TV kept re-detecting in SDR, even from a fresh plug-in. The deep-colour
+    packer stays off (5B06 bit 1), so only the GCP's CD changes.
+  - HDCP 2.2 re-authentication (v7b): bank 4 `5098` (state 10's 200 ms RxStatus poll) →
+    `hdcp_reauth_tick` (`FF00`), and `4DC5` (state 1 entry) → `hdcp_auth_start`
+    (`FF2D`). On v6b about half the HDR → SDR switches left the TV black, with mode
+    banners cycling at random, for ever. The hub had authenticated while the TV was
+    still re-locking to the new signal, and the TV's cipher fell out of step. The TV
+    never sets REAUTH_REQ, so the stock poll never notices. Moving the state machine
+    from 10 to 1 by hand (`D943`) recovered the TV both times it was tried. Now, about
+    2 s after each authentication the firmware starts reaches state 10, the hub
+    re-authenticates once. HDCP stays on throughout, and disabling it was ruled out as a
+    fix. One XDATA byte (`E9F0`, unused by the stock firmware) tracks the one-shot.
+    v7 re-armed it on the firmware's own retry of a failed attempt and so
+    re-authenticated every ~2.7 s; v7b keeps the one-shot until state 10 is reached
+    again.
   - Hash-locked like the other patches: original hook bytes, erased overlay space and
-    the exact footprint (100 bytes) are checked.
+    the exact footprint (168 bytes) are checked.
   - Offline tests: a synthetic image, the real dump, and simulated flashes (v4 → v5
-    is 3 sectors; v5 → v6 is 1).
+    is 3 sectors; v5 → v6 and v6 → v6b are 1 each).
   - Candidates v1 (`f191da0f…8e92`; colour depth only), v2 (`d249fa20…a695`) and v3
     (`f5de8f43…2b8b`; SDR much smoother, scrambling still escalating) v4
-    (`390ed39d…37cd`; check forced to pass) and v5 (`cc224105…0ca0`) were flashed. v2 fixed the end state of every switch, but about half the switches still
-    failed in an automated soak, because the AVI could be built before the stale code
-    was cleared. Both stay known as superseded, so `rtd-flash` can move a hub off them.
+    (`390ed39d…37cd`; check forced to pass), v5 (`cc224105…0ca0`), v6 (`3a56a3aa…fd62`;
+    GCP with CD 0), v6b (`474c2169…cbbc`; HDCP desync) and v7 (`814c74af…dbf0`;
+    re-authentication loop) were flashed. v2 fixed the end state of every switch, but
+    about half the switches still failed in an automated soak, because the AVI could be
+    built before the stale code was cleared. All stay known as superseded, so
+    `rtd-flash` can move a hub off them.
 - `rtd-clear-bits ADDR MASK --volatile-ram-write`: clears allow-listed bits (`E362`
-  bit 1, `5B07[7:4]`) through the debug interface, for experiments. It never writes
+  bit 1, `5B07[7:4]`, `D943` bits 3 and 1) through the debug interface, for experiments. It never writes
   flash, and unplugging the hub undoes it. The write path (`0x03` sets the data byte,
   `0x3B` writes it) was checked in the firmware's dispatch table before first use.
 - `rtd-set-bits ADDR MASK --volatile-ram-write`: sets allow-listed bits (`SETTABLE`:
-  E10B bit 3, the slow-sink 500 ms scrambling wait) for experiments. It shares the
+  E10B bit 3, the slow-sink 500 ms scrambling wait; D943 bits 4 and 0) for experiments.
+  D943 (with `rtd-clear-bits` D943 `0A`) moves the HDCP 2.2 transmitter from state 10 to
+  1, a fresh authentication with encryption kept on. It shares the
   write path, refusal-before-bus rules and tests with `rtd-clear-bits`.
 - Whole-firmware Ghidra pass: `research/ghidra/FunctionReport.java`, `DecompileAll.java`
   and `auto_names.py`.
@@ -124,6 +153,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- README: a charger in the hub's power port is needed for TV mode (without one a
+  Switch 2 stayed in handheld mode), and waking a docked Switch 2 from sleep is a known
+  issue (controller wake often gives no picture; undock, redock and use the power
+  button). The system-version table records the v7b Switch 2 result.
+  `research/DP_HDR_AND_VRR.md` section 6 plans the VL103 wake investigation.
 - README system-version table: a Switch 2 works in SDR and HDR on RTD2142 SDR-fix v1,
   an image without the BT.2020 change. The first connection needed several replugs and
   SDR/HDR toggles; after that a replug came up at once. With the BT.2020 patch the same

@@ -52,9 +52,22 @@ Not fixed, and things to avoid:
 - **HDR to SDR switching (stock RTD2142 bug).** After a source switches from HDR to SDR
   while connected (for example macOS turning HDR off), the TV can keep re-detecting the
   signal (SDR, HDR, HLG in turn) until the hub is replugged. The stock firmware keeps
-  the HDR colorimetry (BT.2020) after the source has moved back to SDR. A fix
-  candidate, `rtd2142 --sdr-fix`, is built and tested offline but not yet on a hub; see
+  the HDR colorimetry (BT.2020) after the source has moved back to SDR, and after an
+  output restart its HDCP 2.2 session with the TV can fall out of step. The fix
+  candidate, `rtd2142 --sdr-fix` (v7b), passed a 20-switch Mac HDR/SDR soak on one hub
+  with no cycling, and came back after TV power cycles and input switches. A Switch 2
+  on it works in SDR and HDR, switching between them, and after TV input changes.
+  Expect one brief blink about 2 s after each switch, TV power cycle or input change:
+  the hub re-runs the HDCP handshake once, and HDCP stays on. See
   [Research](#research-dp-port-hdr-and-vrr).
+- **Plug a charger into the hub's USB-C power port for TV mode.** Without one, a
+  Switch 2 stayed in handheld mode and the TV showed no signal. The hub can offer the
+  Switch 15 V only when a charger supplies it.
+- **Waking a docked Switch 2 from sleep is unreliable.** Waking it with a controller
+  often gives no picture, even with a 100 W charger. To recover, undock the Switch
+  while it sleeps, dock it again, and wake it with the console's power button. The
+  suspect is the VL103's DisplayPort hot-plug signalling after a wake (unverified; see
+  [Research](#research-dp-port-hdr-and-vrr)).
 - The power patch lowers the hub's own power reserve from 7 W to 3 W. Keep
   power-hungry USB devices off the hub while docked.
 
@@ -74,7 +87,7 @@ images and refuses anything else:
 | --- | --- | --- | --- |
 | VL103 PD firmware 10.48.3.22 | 32 KiB | `3763c9f3ed64316dc2faeb94dfe14dfb18da4fb1589298740a27979f3737cff3` | `6b5b0eff3e72be89b1b226739face9194f2ec30812b8c1fda5346cae90f4888e` |
 | RTD2142 flash | 2 MiB | `17eea7286255892698066e0b46085dcb5a42855f9797f067041c2ee45104d802` | `f242d130c7a0947f75bc673eb6100160c3cdb8e1d2f5cb9d1a5dca5332a742f1` |
-| RTD2142 flash, SDR-fix candidate v6 (`--sdr-fix`, not yet tested on a hub) | 2 MiB | same | `3a56a3aa183f7249743c7d9b7a19b89ac528053bc1deb0882126178c21cbfd62` |
+| RTD2142 flash, SDR-fix candidate v7b (`--sdr-fix`, Mac HDR/SDR soak and Switch 2 test passed on one hub) | 2 MiB | same | `4a39d09511603c6c2947003b9fbf3dd58612622c5932f1b22e8af4f2e69bfd24` |
 
 If your dump has a different hash, your hub has different firmware and these patches
 don't apply. Please don't force them.
@@ -89,6 +102,7 @@ video on many third-party docks, and 23.0.0 added docked VRR. Results recorded s
 | 23.0.1 | VL103 patched (`6b5b0eff…888e`), RTD2142 stock | Works: enters TV mode; docking delay roughly halved (about 1.5 s, judged by eye); HDMI picture good, HDR still somewhat washed out as expected with the RTD2142 stock. Tested with VRR off, no Dock Update, no USB devices on the hub |
 | Same console, 2026-11-14 | VL103 patched, RTD2142 patched (`f242d130…42f1`) | **No HDMI picture** with the Switch's HDR setting on or off: the TV detected a signal but showed nothing. Under investigation; the RTD2142 was flashed back to stock. HDR from a Mac through the same hub looked right |
 | Same console, 2026-11-14 | VL103 patched, RTD2142 SDR-fix candidate v1 (`f191da0f…8e92`, no BT.2020 patch) | **Works in SDR and HDR.** The first connection needed several replugs and SDR/HDR toggles before a picture appeared; after that it stayed stable, and the next replug came up at once in both modes. HDR colours not assessed; this image has no BT.2020 change, so expect the stock look |
+| Same console, 2026-11-14 | VL103 patched, RTD2142 SDR-fix candidate v7b (`4a39d095…bfd24`), charger in the hub's power port | **Works in SDR and HDR**, including switching between them and TV input changes. Without a charger the Switch stayed in handheld mode. Waking from sleep with a controller often gives no picture; undocking during sleep, redocking and waking with the power button recovers it |
 
 Before you accept a console update, check here, and keep your stock dumps so you can
 roll the hub back.
@@ -342,8 +356,12 @@ It is not part of the patch pipeline.
 - **Live reads (2026-11-14):** the hub's input is DP RX stream 2, not stream 1. The
   HDR-to-SDR re-detect loop is the stock firmware keeping the VSC SDP's BT.2020
   colorimetry after the source clears MSA MISC1 bit 6 (DP 1.4a Table 2-96 makes MISC0
-  authoritative then), plus a stale 12-bit HDMI colour depth. `rtd2142 --sdr-fix`
-  addresses both.
+  authoritative then), plus a stale 12-bit HDMI colour depth. Later candidates also fixed
+  the HDR packet, the scrambling fall-back and the General Control Packet in SDR. The
+  last cause found: after an output restart the hub authenticates HDCP 2.2 while the TV
+  is still re-locking, and the TV's cipher can fall out of step, giving a black screen
+  with banners cycling. The TV never asks for re-authentication. `rtd2142 --sdr-fix`
+  (v7b) covers all of these.
 
 ## Credits
 

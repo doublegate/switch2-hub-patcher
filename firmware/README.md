@@ -32,7 +32,10 @@ both use the flat layout in the current directory, as before.
 | `candidates/rtd2142-sdrfix-v3.bin` (+ `.json`) | RTD2142 SDR-fix v3, superseded | `f5de8f43f8c44338822bec2ec31b67bda326f5e985f867410caf6f099cf22b8b` |
 | `candidates/rtd2142-sdrfix-v4.bin` (+ `.json`) | RTD2142 SDR-fix v4, superseded | `390ed39dc2bb2880c0251d63d6889856438c8ec775123c203f77b720740737cd` |
 | `candidates/rtd2142-sdrfix-v5.bin` (+ `.json`) | RTD2142 SDR-fix v5, superseded | `cc2241056e8cd1311234a232403f35fdfd12ceff456d9ca5ac514fd987920ca0` |
-| `candidates/rtd2142-sdrfix-v6.bin` (+ `.json`) | RTD2142 SDR-fix v6, not yet tested on a hub | `3a56a3aa183f7249743c7d9b7a19b89ac528053bc1deb0882126178c21cbfd62` |
+| `candidates/rtd2142-sdrfix-v6.bin` (+ `.json`) | RTD2142 SDR-fix v6, superseded | `3a56a3aa183f7249743c7d9b7a19b89ac528053bc1deb0882126178c21cbfd62` |
+| `candidates/rtd2142-sdrfix-v6b.bin` (+ `.json`) | RTD2142 SDR-fix v6b, superseded | `474c2169873c7adf1af64af7133f3b57688e914d3f7a6cc80070bee456e6cbbc` |
+| `candidates/rtd2142-sdrfix-v7.bin` (+ `.json`) | RTD2142 SDR-fix v7, superseded (re-authenticates in a loop) | `814c74afdef0a4c726c01990df077a50a305928a0e0bf590f0d14c134214dbf0` |
+| `candidates/rtd2142-sdrfix-v7b.bin` (+ `.json`) | RTD2142 SDR-fix v7b, Mac HDR/SDR soak and Switch 2 test passed on one hub | `4a39d09511603c6c2947003b9fbf3dd58612622c5932f1b22e8af4f2e69bfd24` |
 
 Check any file with `switch2-hub-patcher identify firmware/*/*.bin`. A file that
 reports "unknown" is a different firmware version or a corrupt dump; don't flash it.

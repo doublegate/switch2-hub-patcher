@@ -249,3 +249,22 @@
 2	CODE	ff20	hdmi_drm_enable_guard	SDR-fix v5 overlay (not stock): HDR packet on only while the source EOTF (DD9F & 7) is non-zero
 1	CODE	dfae	rx_infoframe_reset_pulse	R5 = which (0..3), R7 = port: pulses a dp_info_*_rst bit in B23C/B43C..
 2	CODE	fa18	hdmi_gcp_8bit_test	CJNE R7,#8 in hdmi_gcp_update (stock: 8-bit -> GCP off, AVMUTE never cleared); SDR-fix v6: SJMP FA24, GCP with Clear_AVMUTE in every mode
+4	CODE	4c50	hdmi_hdcp22_tx_dispatch	HDCP 2.2 transmitter state machine: jump table at 4C86 on D943[3:0], states 0..10 = 4CA7 4DBF 4DF5 4E47 4E69 4E8E 4F24 4F4F 4FA6 4FF5 507E
+4	CODE	4dbf	hdmi_hdcp22_state1_start	state 1: on entry (D943 bit 4) reads HDCP2Version (F3E0 at 4DC5), then AKE_Init (DF1A); SDR-fix v7b hooks 4DC5
+4	CODE	507e	hdmi_hdcp22_state10_auth	state 10 (authenticated): every 200 ms (timer 0x4B) polls RxStatus (EBEC at 5098); REAUTH_REQ -> D944 |= 1, E0DE + 1, state 0; SDR-fix v7b hooks 5098
+4	CODE	ebec	hdmi_hdcp22_rxstatus_poll	reads the sink's RxStatus (HDCP port 0x71, via 6B15); R7 = 8 for REAUTH_REQ
+4	CODE	f3e0	hdmi_hdcp22_read_version_q	reads the sink's HDCP2Version at state 1 entry
+4	CODE	fafc	hdmi_hdcp22_set_state	D943 = (D943 & F0) | R7 | 0x10 (state + "changed")
+4	CODE	6acd	hdmi_hdcp22_fail_retry_q	E0DE + 1, D944 |= 1: an authentication attempt failed, retried through state 1
+4	CODE	6b15	hdmi_hdcp_ddc_read_q	DDC read from the sink's HDCP port (8-bit 0x74, 7-bit 0x3A)
+4	CODE	ff00	hdcp_reauth_tick	SDR-fix v7b overlay (not stock): in state 10, one forced re-authentication (state 1) 10 ticks after each firmware-started authentication
+4	CODE	ff2d	hdcp_auth_start	SDR-fix v7b overlay (not stock): arms hdcp_reauth_tick at state 1 entry unless the authentication is its own (or a retry of it)
+*	EXTMEM	d943	hdcp22_tx_state	[3:0] state (0..10, 10 = authenticated), bit 4 state changed, bits 5/6 sink HDCP 2.2-capable
+*	EXTMEM	d944	hdcp22_tx_flags_q	bit 0 set on re-authentication or a failed attempt
+*	EXTMEM	d948	hdcp22_tx_status_q	bit 0: RxStatus read failed
+*	EXTMEM	e0de	hdcp22_reauth_count	re-authentications and retries since the output start (stays 0 when the TV never asks)
+*	EXTMEM	e9f0	sdrfix_hdcp_reauth_flag	SDR-fix v7b (not stock; unreferenced by the stock firmware): bit 7 done, bit 6 own re-authentication in progress, [3:0] 200 ms ticks
+*	EXTMEM	5b0a	hdmi_hdcp_enc_en_q	bit 7: HDMI TX HDCP encryption enabled
+*	EXTMEM	5bb2	hdmi_hdcp22_ks_q	session key enc_ks, 5BB2..5BC2 (riv at 5BD3..5BDA)
+1	CODE	d72f	hdcp_downstream_authed_q	repeater check: returns early unless the downstream HDCP state is authenticated (D943 / D872 state 10, or HDCP 1.4 state 4 at E315); reached by indirect call
+1	CODE	d83c	hdcp_downstream_idle_q	repeater check: the same, for downstream state 0 (not authenticating); reached by indirect call
