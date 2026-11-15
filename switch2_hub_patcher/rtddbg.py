@@ -48,6 +48,12 @@ CLEARABLE = {
         'HDMI TX dp_color_depth; 0 is the 8-bit value a fresh start uses (stock firmware '
         'leaves 12-bit here after an HDR to SDR switch)',
     ),
+    0xD943: (
+        0x0A,
+        'HDCP 2.2 TX state (bank 4 hdmitx_ram_fafc: [3:0] state, bit 4 state changed); with '
+        'set_bits 0x11 first, moves state 10 (authenticated, 0x6A) to 1 (0x71), which the '
+        'firmware runs as a fresh authentication with encryption kept on',
+    ),
 }
 # The only bits set_bits may touch: address -> (settable mask, what it is).
 SETTABLE = {
@@ -56,6 +62,11 @@ SETTABLE = {
         'hdmi_sink_quirk_flags bit 3: the slow-sink quirk; hdmi_scdc_scramble_start then waits '
         '500 ms instead of 100 ms after the SCDC TMDS_Config write. Recomputed from the EDID '
         'at the next hot plug',
+    ),
+    0xD943: (
+        0x11,
+        'HDCP 2.2 TX state: bit 4 (state changed) and bit 0; the first half of restarting '
+        'authentication (state 10 -> 1, see CLEARABLE). Volatile; a replug resets it',
     ),
 }
 MAX_ADDRESSES = 256

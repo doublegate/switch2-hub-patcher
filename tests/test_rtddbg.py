@@ -114,6 +114,25 @@ class ClearBitsTests(unittest.TestCase):
         self.assertIn('E362  before 0x23  after 0x21', out.getvalue())
 
 
+class HdcpRestartTests(unittest.TestCase):
+    def test_d943_state_10_to_1_takes_one_set_and_one_clear(self):
+        chip = FakeDebugSlave({0xD943: 0x6A})
+        self.assertEqual(rtddbg.set_bits(chip, 0xD943, 0x11, sleep=no_sleep), (0x6A, 0x7B))
+        self.assertEqual(rtddbg.clear_bits(chip, 0xD943, 0x0A, sleep=no_sleep), (0x7B, 0x71))
+
+    def test_d943_other_bits_are_refused(self):
+        for fn, mask in (
+            (rtddbg.set_bits, 0x20),
+            (rtddbg.set_bits, 0x01 | 0x40),
+            (rtddbg.clear_bits, 0x40),
+            (rtddbg.clear_bits, 0x0F),
+        ):
+            chip = FakeDebugSlave({0xD943: 0x6A})
+            with self.assertRaises(rtddbg.DebugError, msg=(fn, mask)):
+                fn(chip, 0xD943, mask, sleep=no_sleep)
+            self.assertEqual(chip.log, [])
+
+
 class SetBitsTests(unittest.TestCase):
     def test_sets_only_the_allowed_bit(self):
         chip = FakeDebugSlave({0xE10B: 0x01})
