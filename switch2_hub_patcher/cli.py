@@ -26,6 +26,7 @@ from .pipeline import (
     identify,
     overlay_digests,
     patch_rtd2142,
+    patch_rtd2142_sdr_fix_bt2020,
     patch_rtd2142_sdr_fix_only,
     patch_vl103,
     sha256,
@@ -444,6 +445,12 @@ def main(argv=None):
                 help='build the HDR -> SDR fix candidate from stock instead of the BT.2020 '
                 'patch (a candidate, tested on one hub)',
             )
+            p.add_argument(
+                '--bt2020',
+                action='store_true',
+                help='with --sdr-fix: also mark HDR AVIs BT.2020 when the TV lists it for the '
+                'pixel encoding (candidate, not yet tested on a hub)',
+            )
     p = sub.add_parser('identify', help='report whether files are known stock/patched images')
     p.add_argument('files', nargs='+')
     sub.add_parser('doctor', help='check SDCC and that it assembles the patches as expected')
@@ -527,6 +534,10 @@ def main(argv=None):
     if args.command == 'vl103':
         return cmd_patch(args, patch_vl103)
     if args.command == 'rtd2142':
+        if args.bt2020 and not args.sdr_fix:
+            ap.error('--bt2020 builds on the SDR fix; use --sdr-fix --bt2020')
+        if args.bt2020:
+            return cmd_patch(args, patch_rtd2142_sdr_fix_bt2020)
         return cmd_patch(args, patch_rtd2142_sdr_fix_only if args.sdr_fix else patch_rtd2142)
     if args.command == 'doctor':
         return cmd_doctor()

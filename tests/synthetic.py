@@ -17,6 +17,7 @@ from switch2_hub_patcher import (
     patch_identity_vid,
     patch_power_15v,
     patch_query02,
+    patch_rtd2142_bt2020,
     patch_rtd2142_hdr_avi,
     patch_rtd2142_sdr_fix,
     patch_svid,
@@ -71,6 +72,22 @@ def rtd2142_sdr_fix_image():
         base = bank * patch_rtd2142_sdr_fix.BANK_SIZE
         image[base + at : base + at + len(old)] = old
     return bytes(image)
+
+
+def rtd2142_bt2020_image():
+    """Stand-in for the SDR-fix v7b image: the BT.2020 step's hook bytes and erased region."""
+    image = _filler(0x200000, 'rtd2142-bt2020')
+    base = patch_rtd2142_bt2020.BANK_BASE
+    lo, hi = patch_rtd2142_bt2020.REGION
+    image[base + lo : base + hi] = b'\xff' * (hi - lo)
+    for at, old, _, _ in patch_rtd2142_bt2020.HOOKS:
+        image[base + at : base + at + 3] = old
+    return bytes(image)
+
+
+def run_rtd2142_bt2020(image):
+    with mock.patch.object(patch_rtd2142_bt2020, 'BASE_SHA', sha(image)):
+        return patch_rtd2142_bt2020.build(image)
 
 
 def run_rtd2142_sdr_fix(image):
