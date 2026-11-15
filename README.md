@@ -60,6 +60,14 @@ Not fixed, and things to avoid:
   Expect one brief blink about 2 s after each switch, TV power cycle or input change:
   the hub re-runs the HDCP handshake once, and HDCP stays on. See
   [Research](#research-dp-port-hdr-and-vrr).
+- **HDR colours from a Switch 2 (BT.2020).** The Switch sends HDR metadata without the
+  DisplayPort-side BT.2020 marker the RTD2142 looks for, so the hub's HDMI output says
+  BT.709 and HDR looks washed out. `rtd2142 --sdr-fix --bt2020` builds a candidate on
+  top of v7b that marks HDR as BT.2020, but only when the TV's EDID lists BT.2020 for
+  the pixel format being sent (YCbCr or RGB). It never touches a picture the source
+  already marked. It is tested in a simulator only, not yet on a hub. A TV that lists
+  BT.2020 only for YCbCr keeps the washed-out look whenever the Switch sends RGB. See
+  [Research](#research-dp-port-hdr-and-vrr).
 - **Plug a charger into the hub's USB-C power port for TV mode.** Without one, a
   Switch 2 stayed in handheld mode and the TV showed no signal. The hub can offer the
   Switch 15 V only when a charger supplies it.
@@ -88,6 +96,7 @@ images and refuses anything else:
 | VL103 PD firmware 10.48.3.22 | 32 KiB | `3763c9f3ed64316dc2faeb94dfe14dfb18da4fb1589298740a27979f3737cff3` | `6b5b0eff3e72be89b1b226739face9194f2ec30812b8c1fda5346cae90f4888e` |
 | RTD2142 flash | 2 MiB | `17eea7286255892698066e0b46085dcb5a42855f9797f067041c2ee45104d802` | `f242d130c7a0947f75bc673eb6100160c3cdb8e1d2f5cb9d1a5dca5332a742f1` |
 | RTD2142 flash, SDR-fix candidate v7b (`--sdr-fix`, Mac HDR/SDR soak and Switch 2 test passed on one hub) | 2 MiB | same | `4a39d09511603c6c2947003b9fbf3dd58612622c5932f1b22e8af4f2e69bfd24` |
+| RTD2142 flash, SDR-fix v7b + BT.2020 candidate v1 (`--sdr-fix --bt2020`, not yet tested on a hub) | 2 MiB | same | `6cffad2e3a8848e6b73137424841fbe36f73c6e7c30472248e10468c523c06f4` |
 
 If your dump has a different hash, your hub has different firmware and these patches
 don't apply. Please don't force them.

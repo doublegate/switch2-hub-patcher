@@ -36,9 +36,57 @@ both use the flat layout in the current directory, as before.
 | `candidates/rtd2142-sdrfix-v6b.bin` (+ `.json`) | RTD2142 SDR-fix v6b, superseded | `474c2169873c7adf1af64af7133f3b57688e914d3f7a6cc80070bee456e6cbbc` |
 | `candidates/rtd2142-sdrfix-v7.bin` (+ `.json`) | RTD2142 SDR-fix v7, superseded (re-authenticates in a loop) | `814c74afdef0a4c726c01990df077a50a305928a0e0bf590f0d14c134214dbf0` |
 | `candidates/rtd2142-sdrfix-v7b.bin` (+ `.json`) | RTD2142 SDR-fix v7b, Mac HDR/SDR soak and Switch 2 test passed on one hub | `4a39d09511603c6c2947003b9fbf3dd58612622c5932f1b22e8af4f2e69bfd24` |
+| `candidates/rtd2142-sdrfix-v7b-bt2020-v1.bin` (+ `.json`) | RTD2142 SDR-fix v7b + BT.2020 candidate v1 (`--sdr-fix --bt2020`), not yet tested on a hub | `6cffad2e3a8848e6b73137424841fbe36f73c6e7c30472248e10468c523c06f4` |
 
 Check any file with `switch2-hub-patcher identify firmware/*/*.bin`. A file that
 reports "unknown" is a different firmware version or a corrupt dump; don't flash it.
+
+## What a full tree holds
+
+This is the maintainer's tree as of 2026-11-14, so you know what each regenerated file
+is. Sizes are approximate. Nothing below is tracked by git.
+
+### Images (about 23 MB)
+
+- `stock/`: `vl103-stock.bin` (32 KiB) and `rtd2142-stock.bin` (2 MiB), dumped from
+  the hub.
+- `patched/`: the VL103 release patch and the RTD2142 BT.2020 patch, each with its
+  `.json` manifest. The VL103 image is on the hub; the RTD2142 one is not (it gave no
+  Switch 2 picture).
+- `candidates/`: SDR-fix v1 to v7b (v1, v2, v3, v4, v5, v6, v6b, v7, v7b) and the
+  BT.2020 rework on v7b (`v7b-bt2020-v1`), 2 MiB each plus a manifest. The manifest lists every hook (address, original bytes,
+  replacement), every single-byte patch, the overlay symbols, the source asm digests,
+  the changed banks and byte count, and a plain-language `behaviour` and `unchanged`
+  list. v7b is the image on the hub.
+
+### `analysis/` (about 57 MB)
+
+The RTD2142 flash holds eight 64 KiB 8051 code banks. Every analysis file is per bank
+(`bank0` to `bank7`) and keyed by 16-bit bank-local addresses. Common code sits in
+0000 to 3FFF of every bank, and cross-bank calls go through stubs.
+
+| Path | What it is | Made by |
+| --- | --- | --- |
+| `ghidra/rtd.gpr`, `ghidra/rtd.rep/` (50 MB) | Ghidra 12 project: the eight banks imported as separate 8051 programs, functions seeded at every call target, and the curated plus automatic names applied | `analyzeHeadless -import`, `SeedFunctions.java`, `RenameSymbols.java` |
+| `reports/bankN.tsv` | One row per function (about 11,300 in all): entry, name, size, caller count, callees, XDATA and SFR reads, writes | `FunctionReport.java` |
+| `reports/stub_targets.txt` | Per bank, the entry points reached through the cross-bank call stubs (for example bank 1 `D72F`/`D83C`, the HDCP repeater checks). A function with no direct callers is often only reached this way | `FunctionReport.java` |
+| `auto_symbols.tsv` | About 10,160 automatic names: subsystem prefixes (`hdmitx_`, `dptx1_`, `dprx2_`, `hdcp_`, `dpcd_`, `sys_` and so on) from the registers a function touches, spread over the call graph, and `call_bN_xxxx` names for stubs. About 1,000 are XDATA variables. Curated names in `research/rtd2142_symbols.tsv` (240 entries) always win | `research/ghidra/auto_names.py` |
+| `db-registers.tsv` | About 6,660 register names and bit fields for the chip's register space, decoded from the RTD2172 tool database (the RTD2142's page layout matches it) | `research/rtd_db_dump.py`, `research/ghidra/db_to_tsv.py` |
+| `decompiled/bankN_full.c` | Ghidra pseudo-C of every function in the bank, with names applied and a header comment giving each function's callers. Banks 0 to 6 are 35,000 to 46,000 lines each; bank 7 is about 8,900 | `DecompileAll.java` |
+| `decompiled/bankN.c` | Pseudo-C of only the curated functions and call sites (banks 0, 1, 2, 3, 5, 6), easier to read | `DecompSites.java` |
+
+Read the pseudo-C with care:
+
+- Ghidra decompiles the compiler's 32-bit math and pointer helpers (for example
+  `sys_ctl_4055`) as if they were plain reads.
+- Register-bank (`BANK0_R7`) data flow is often lost, so check important paths in the
+  listing (`Listing.java`).
+- Bank-switched calls appear as stub calls.
+- The automatic names are guesses from register use; a name only becomes trusted once
+  it is in the curated symbol map.
+
+To regenerate everything from your own stock dump, follow
+`research/DP_HDR_AND_VRR.md` section 4.
 
 ## Naming
 

@@ -54,6 +54,33 @@ All notable changes to this project are documented here. The format follows
 - `.gitignore` covers the research by-products that are derived from vendor firmware or
   tools: Ghidra projects and exports (`*.gpr`, `*.rep/`, `*.gzf`, lock files), the
   decoded register label tables and the RTD2172 DB's `ReadAll.txt`.
+- RTD2142 **BT.2020 rework candidate v1, stacked on SDR-fix v7b**
+  (`rtd2142 --sdr-fix --bt2020`, `patch_rtd2142_bt2020.py`,
+  `asm/rtd2142_bt2020_avi.asm`, output `6cffad2e…06f4`, not yet tested on a hub). It is
+  a new pipeline step on the v7b output (`RTD2142_SDR_FIX_BT2020_STEPS`). It changes bank
+  2 only: 200 bytes at FF36..FFFD and three hooks.
+  - `F390` wraps `hdmi_build_avi`.
+  - `F31F` runs v7b's `hdmi_drm_enable_guard` and then re-decides.
+  - `F326` turns the HDR packet off and then re-decides.
+
+  Differences from the upstream BT.2020 patch:
+  - **AVIs the source already marked extended are left as built.** The patch never
+    touches an AVI built with C = 3, including version-4 EC = 7 with ACE and BT.2020
+    cYCC.
+  - **BT.2020 is claimed only when the TV lists it.** For PQ/HLG metadata, C = 3 /
+    EC = 6 is written only when the TV's EDID Colorimetry Data Block lists BT.2020 for
+    the pixel encoding being sent (BT2020_RGB for RGB, BT2020_YCC for YCbCr). The
+    EDID is read from the hub's own copy at XDATA C600.
+  - **The decision is re-made on every HDR metadata update.** The AVI is rebuilt only
+    when the decision changes, which corrects an output start that built the AVI before
+    the metadata was current. State is kept in XDATA E9F1.
+
+  Tests:
+  - `tests/test_bt2020.py` runs the assembled bytes in a new minimal 8051 interpreter,
+    `tests/sim8051.py`. It covers encodings against sink flags, EOTFs, extended AVIs,
+    malformed EDIDs and the rebuild sequence.
+  - Synthetic build, guard and dump-gated chain tests are included.
+  - The overlay digest is recorded for SDCC 4.6.0.
 - RTD2142 **HDR-to-SDR fix candidate** (`rtd2142 --sdr-fix`, `patch_rtd2142_sdr_fix.py`,
   v7b output `4a39d095…bfd24`; a 20-switch Mac HDR/SDR soak on one hub landed every
   switch with no cycling, one brief blink each, and a TV power cycle and an input switch
@@ -153,6 +180,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- `research/DP_HDR_AND_VRR.md` section 7 covers:
+  - how the stock AVI builder (`hdmi_avi_fill_fields`, bank 2 `7D03`) maps VSC and
+    MISC0 colorimetry to C/EC;
+  - the version-4 rule and the shared once-packet window;
+  - the three EDID buffers (C500/C600/C700) found by a full live XDATA read;
+  - what is publicly known about the Switch 2's output encoding;
+  - a test plan for the rework.
+- `research/rtd2142_symbols.tsv`: 14 new names (AVI field builder and helpers, EDID
+  buffer loader and buffers, E0E8, the overlay entry points, E9F1), applied to the local
+  Ghidra project. `firmware/README.md` documents everything in a full local `firmware/`
+  tree, `analysis/` included.
+- `AGENTS.md`: live-debugging notes (address list, double reads), EDID tooling,
+  Ghidra pseudo-C caveats, and the order of work.
 - README: a charger in the hub's power port is needed for TV mode (without one a
   Switch 2 stayed in handheld mode), and waking a docked Switch 2 from sleep is a known
   issue (controller wake often gives no picture; undock, redock and use the power

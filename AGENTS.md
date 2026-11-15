@@ -35,14 +35,23 @@
 
 ### Gotchas / institutional knowledge
 
-- Supported images are exactly the hashes in the README table (four, plus the RTD2142 SDR-fix candidate v7b `4a39d095…bfd24`, which passed a Mac HDR/SDR soak and a Switch 2 test on one hub, and the superseded v1 `f191da0f…8e92`, v2 `d249fa20…a695`, v3 `f5de8f43…2b8b`, v4 `390ed39d…37cd`, v5 `cc224105…0ca0`, v6 `3a56a3aa…fd62`, v6b `474c2169…cbbc` and v7 `814c74af…dbf0`, known only so `rtd-flash` can move a hub off them). Never loosen the hash checks to accept other dumps.
+- Supported images are exactly the hashes in the README table (four, plus the RTD2142 SDR-fix candidate v7b `4a39d095…bfd24`, which passed a Mac HDR/SDR soak and a Switch 2 test on one hub; the stacked SDR-fix v7b + BT.2020 candidate v1 `6cffad2e…06f4` (`--sdr-fix --bt2020`, not yet tested on a hub); and the superseded v1 `f191da0f…8e92`, v2 `d249fa20…a695`, v3 `f5de8f43…2b8b`, v4 `390ed39d…37cd`, v5 `cc224105…0ca0`, v6 `3a56a3aa…fd62`, v6b `474c2169…cbbc` and v7 `814c74af…dbf0`, known only so `rtd-flash` can move a hub off them). Never loosen the hash checks to accept other dumps.
 - The RTD2142 BT.2020 patch (`f242d130…42f1`) was validated upstream in a simulator only. On one hub it gave correct HDR from a Mac but no HDMI picture from a Switch 2, while the same Switch worked on SDR-fix v1 (no BT.2020 change). Don't describe it as hardware-tested.
-- `OVERLAY_DIGESTS_SDCC_4_6_0` in `pipeline.py`: the first six entries are confirmed (on 2026-11-14 real stock VL103 and RTD2142 dumps passed the pipeline with SDCC 4.6.0 and produced `6b5b0eff…888e` and `f242d130…42f1`); `rtd2142_sdr_fix` is recorded from the real stock dump, for a candidate image.
+- `OVERLAY_DIGESTS_SDCC_4_6_0` in `pipeline.py`: the first six entries are confirmed (on 2026-11-14 real stock VL103 and RTD2142 dumps passed the pipeline with SDCC 4.6.0 and produced `6b5b0eff…888e` and `f242d130…42f1`); `rtd2142_sdr_fix` and `rtd2142_bt2020_avi` are recorded from the real stock dump, for candidate images.
 - macOS IOAVService I2C reads work on the real hub (2026-11-14: `rtd-dump` about 9 min per read at 32-byte chunks); the first macOS `rtd-flash` (stock -> patched, about 18 min) succeeded the same day. `rtd-flash` writes only after a full same-session read matches the base hash.
 - Tests must never reach real hardware: with a hub attached to the Mac, an unmocked `cmd_rtd_dump`/`transport_args` talks to the live chip. Don't run the suite while a dump or flash is in progress.
 - Absolute home paths must never be committed (public repo): `.githooks/` (enable with `git config core.hooksPath .githooks`) blocks them on commit/push and CI re-checks. Master-Claude writes home-relative `@~/` imports (its `mc-sync` converts legacy absolute ones); never run it here with `--absolute-imports`.
 - Never accept a Switch "Dock Update" on a patched hub (no update handler).
 - `*.bin` and `/firmware/` are gitignored. Never commit firmware dumps or patched images, because they are vendor property. Local layout: `firmware/stock/` (dumps), `firmware/patched/` (flashable images + `.json` manifests), `firmware/candidates/` (untested builds); `status` and `guide` use it when `firmware/` exists (flat cwd otherwise). Dump-gated tests here: `S2HUB_VL103_DUMP=firmware/stock/vl103-stock.bin S2HUB_RTD2142_DUMP=firmware/stock/rtd2142-stock.bin`.
+- Hub use: a Switch 2 enters TV mode only with a charger in the hub's USB-C power port (without one it stays in handheld mode, TV "no signal"); docked wake from sleep is unreliable (undock while asleep, redock, power button). Rule those out before blaming RTD2142 firmware.
+- Live debugging (macOS, Mac as the source; the 0x35 interface can't be reached with the Switch as the source): `rtd-peek` reads XDATA/registers, 256 addresses per call. Single reads are sometimes wrong (shifted or stale bytes, an FF23 self-check failure), so take two and compare, and log only changes. Useful addresses:
+  - HDCP 2.2 TX: D943 (state, 0x6A = authenticated), E0DE (re-auth count), E9F0 (v7b flag), 5B0A bit 7 (encryption).
+  - HDR and colorimetry: DD9F & 7 (source EOTF, 2 = PQ), E362 bit 1 (metadata present), E3E6 (VSC colorimetry code, 0x0E = BT.2020 YCbCr).
+  - Scrambling: E0D9.
+  - AVI: 5B4A, 5B49, 5B48 (PB1, PB2, PB3) and 5B4B (checksum). This is a shared once-packet window and usually holds the last packet written (often the Audio InfoFrame), not the AVI.
+- The hub reads the TV's EDID over DDC (0xA0) for its own sink-quirk table (E10B/E10C, HF-VSDB scan) and forwards it to the source by DDC passthrough. On macOS the sink EDID is in `ioreg -l -w0` ("EDID"). `edid-decode` is not in Homebrew; its standalone repo moved into v4l-utils, so build the last standalone commit (`5332a3b`) with meson. Check the sink's Colorimetry Data Block before signalling extended colorimetry: the test TV lists BT.2020 YCC but not BT.2020 RGB.
+- Ghidra pseudo-C in `firmware/analysis/decompiled/` misreads the compiler's 32-bit and pointer helpers (`sys_ctl_4055` and others) as plain reads and loses register-bank data flow. Confirm anything load-bearing in the listing (`Listing.java`) or on the live chip.
+- Research specs (CTA-861, HDMI, DP, USB-PD, HDCP), datasheets and real-world reports online whenever useful, and cite them in `research/DP_HDR_AND_VRR.md`.
 - The flashing workflow (fwupd `vli` plugin with `contrib/via-vl817-vl103.quirk`, flashrom `realtek_mst_i2c_spi`) is Linux-only and documented in the README. The patcher itself runs anywhere SDCC does.
 
 ### Where things live
@@ -55,6 +64,7 @@
 - `switch2_hub_patcher/dpaux.py`, `rtd2142_map.py` — read-only AUX bus finder; RTD2142 register xref survey (names from the RTD2172 DB)
 - `switch2_hub_patcher/rtddbg.py` — 0x35 debug client (`tests/fake_dbg.py` simulates it): reads, plus `clear_bits`/`set_bits` limited to `CLEARABLE`/`SETTABLE` (volatile RAM/registers). Never widen the allowlist or add the block write (0xBA) without a separate review
 - `switch2_hub_patcher/patch_rtd2142_sdr_fix.py` + `asm/rtd2142_rx2_colorimetry.asm`, `asm/rtd2142_hdmi_deep_color.asm`, `asm/rtd2142_hdmi_drm.asm`, `asm/rtd2142_hdcp_reauth.asm` — HDR-to-SDR fix candidate (banks 5, 2 and 4); findings in `research/DP_HDR_AND_VRR.md` section 5
+- `switch2_hub_patcher/patch_rtd2142_bt2020.py` + `asm/rtd2142_bt2020_avi.asm`: the BT.2020 AVI rework, a separate step on the v7b output (bank 2 FF36..FFFD, hooks F390/F31F/F326, flag XDATA E9F1). It reads the sink's Colorimetry Data Block from the EDID buffer at XDATA C600. `tests/sim8051.py` is a minimal 8051 interpreter that runs overlays in tests (`tests/test_bt2020.py`); extend it when an overlay needs a new instruction. Findings are in `research/DP_HDR_AND_VRR.md` section 7.
 - HDCP stays on: never ship or test a fix that disables HDCP encryption (the hub would become an HDCP stripper). The SDR-fix re-authenticates instead.
 - `switch2_hub_patcher/rtdisp.py`, `i2c.py`, `fwupd.py`, `status.py`, `guide.py` — RTD2142 ISP port of flashrom (`tests/fake_rtd.py` simulates the chip), I2C transports, fwupd wrapper, checklist, walk-through
 - `CHANGELOG.md` (Keep a Changelog; add to `[Unreleased]`), `CONTRIBUTING.md` (hash-lock and write-guard rules), `SECURITY.md`, `.github/` (CI, issue/PR templates, Dependabot)
@@ -65,6 +75,10 @@
 
 ### Status / next
 
-- See `CLAUDE.local.md` for volatile session state (current phase/sprint, recent decisions).
+- See `CLAUDE.local.md` (gitignored) for volatile session state: what is flashed, recent decisions, the current work item.
+- Order of work:
+  1. Hardware-test the BT.2020 rework candidate (`6cffad2e…06f4`), flashed over v7b: a Mac soak, then Switch 2 SDR/HDR, reading the TV's signal information for the encoding.
+  2. VRR (`research/DP_HDR_AND_VRR.md` section 2).
+  3. Switch 2 sleep/wake on the VL103 (section 6).
 <<< MC-PROJECT-END >>>
 
