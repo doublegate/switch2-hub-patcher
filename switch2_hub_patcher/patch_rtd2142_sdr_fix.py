@@ -6,8 +6,12 @@ source moves its colorimetry back to MSA MISC0, so the HDMI AVI InfoFrame keeps 
 BT.2020; and the HDMI side leaves the 12-bit colour depth in 5B07. Both were read on a live chip
 while the TV kept re-detecting (research/DP_HDR_AND_VRR.md).
 
-Builds from the hash-guarded stock dump; changes banks 2 and 5 only. Never touches
-hardware. The output is a candidate until it is tested on a hub.
+Also re-authenticates HDCP 2.2 once after each authentication (bank 4): after an output
+restart some TVs lose the cipher sync without asking for re-authentication.
+
+Builds from the hash-guarded stock dump; changes banks 2, 4 and 5 only. Never touches
+hardware. The output is a candidate: v7b passed a Mac HDR/SDR soak and a Switch 2 test
+on one hub.
 """
 
 import hashlib
@@ -38,6 +42,15 @@ PARTS = (
         2,
         (0xFF20, 0xFF50),
         ((0xF31F, bytes.fromhex('12 4a e7'), 'hdmi_drm_enable_guard'),),
+    ),
+    (
+        'rtd2142_hdcp_reauth',
+        4,
+        (0xFF00, 0xFF40),
+        (
+            (0x5098, bytes.fromhex('12 eb ec'), 'hdcp_reauth_tick'),  # state 10 RxStatus poll
+            (0x4DC5, bytes.fromhex('12 f3 e0'), 'hdcp_auth_start'),  # state 1 entry
+        ),
     ),
 )
 LJMP = 0x02
@@ -144,7 +157,7 @@ def build(base):
     if not set(changed) <= allowed:
         raise ValueError('unexpected footprint')
     manifest = {
-        'experiment': 'rtd2142-sdr-fix-v6',
+        'experiment': 'rtd2142-sdr-fix-v7b',
         'base_sha256': BASE_SHA,
         'output_sha256': sha(image),
         'source_sha256': {
@@ -156,7 +169,11 @@ def build(base):
         'hooks': hooks,
         'byte_patches': byte_patches,
         'symbols': {s: f'{bank}:{at:04x}' for s, (bank, at) in symbols.items()},
-        'behaviour': 'HDMI TX: the GCP with Clear_AVMUTE is sent in every mode; the HDR (DRM) '
+        'behaviour': 'HDMI TX HDCP 2.2: about 2 s after an authentication the firmware started '
+        'reaches state 10, the transmitter re-authenticates once (state 1), so a TV whose cipher '
+        'fell out of step during an output restart recovers; HDCP stays on. '
+        'HDMI TX: the GCP with Clear_AVMUTE is sent in every mode, with colour '
+        'depth 4 (24 bpp) for 8-bit output; the HDR (DRM) '
         'packet is sent only while the source metadata EOTF '
         'is non-zero, and an output restart leaves it off until rebuilt; first scrambling-status '
         'check after 250 ms; recovery kept but no fall-back to unscrambled output; '
@@ -164,7 +181,7 @@ def build(base):
         'reads) is 0 while MSA MISC1 bit 6 is clear; and when MISC1 bit 6 is clear and a VSC-derived '
         'colorimetry code is left in E3E6[4:0], the format check clears it (the power-up '
         'value) and reports a change so the firmware rebuilds the output from MISC0; HDMI '
-        'TX: the 8-bit branch of hdmi_set_deep_color also clears 5B07[7:4] (dp_color_depth).',
+        'TX: the 8-bit branch of hdmi_set_deep_color sets 5B07[7:4] (dp_color_depth, GCP CD) to 4.',
         'unchanged': [
             'HDR packet forwarding, AVI builder, DP transmitter',
             'streams 1, 3 and 4, DPCD, EDID, startup, all other banks',

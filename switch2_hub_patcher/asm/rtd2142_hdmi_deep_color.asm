@@ -1,4 +1,4 @@
-; RTD2142 bank 2, HDMI TX deep colour. CANDIDATE, not yet hardware-tested.
+; RTD2142 bank 2, HDMI TX deep colour. CANDIDATE (SDR-fix v6b+), tested on one hub.
 ;
 ; Stock bug: hdmi_set_deep_color (E8FF) programs 5B07[7:4] (dp_color_depth) only for
 ; 10/12-bit input. Its 8-bit branch (E952) clears the 5B06 packing bits but leaves the old
@@ -7,8 +7,14 @@
 ; Hook (checked by patch_rtd2142_sdr_fix.py):
 ;   E952  mov dptr,#0x5b06  ->  ljmp hdmi_deep_color_off
 ;
-; hdmi_deep_color_off does what the stock branch did (5B06 &= 0xFC), also clears
-; 5B07[7:4], keeps dp_last_phase (5B07[3:0]), and rejoins the stock code at E959.
+; hdmi_deep_color_off does what the stock branch did (5B06 &= 0xFC), sets 5B07[7:4] to 4,
+; keeps dp_last_phase (5B07[3:0]), and rejoins the stock code at E959.
+;
+; 5B07[7:4] is also the General Control Packet's colour depth (CD): the stock firmware
+; writes bpc/2 there, which is the HDMI CD code (5 = 30 bpp, 6 = 36 bpp). For 8-bit the
+; code is 4 (24 bpp). CD = 0 ("not indicated") is only for sinks without deep colour;
+; with the GCP on in 8-bit (SDR-fix v6) a deep-colour TV kept re-detecting on CD = 0.
+; The deep-colour packer stays off (5B06 bit 1), so only the GCP's CD changes.
 ; Placed below the BT.2020 overlay (FF80) so both can be applied. No new RAM.
 
 .module rtd2142_hdmi_deep_color
@@ -22,6 +28,7 @@ hdmi_deep_color_off::
     movx @dptr,a
     inc dptr                ; HDMI_CONTROL_7 (5B07)
     movx a,@dptr
-    anl a,#0x0f             ; dp_color_depth = 0 (8-bit), keep dp_last_phase
+    anl a,#0x0f             ; keep dp_last_phase
+    orl a,#0x40             ; dp_color_depth / GCP CD = 4 (24 bits per pixel)
     movx @dptr,a
     ljmp 0xe959             ; stock continues: 5B04 bit 7, ret

@@ -442,7 +442,7 @@ def main(argv=None):
                 '--sdr-fix',
                 action='store_true',
                 help='build the HDR -> SDR fix candidate from stock instead of the BT.2020 '
-                'patch (not yet tested on a hub)',
+                'patch (a candidate, tested on one hub)',
             )
     p = sub.add_parser('identify', help='report whether files are known stock/patched images')
     p.add_argument('files', nargs='+')

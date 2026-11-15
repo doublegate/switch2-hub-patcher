@@ -1,4 +1,4 @@
-; RTD2142 bank 5, DP RX stream 2 (the hub's input). CANDIDATE v3, not yet tested on a hub.
+; RTD2142 bank 5, DP RX stream 2 (the hub's input). CANDIDATE (SDR-fix v3+), tested on one hub.
 ;
 ; Stock bug: in HDR the source signals colorimetry in the VSC SDP (MSA MISC1 bit 6 set) and
 ; rx2_colorimetry_from_vsc (C37B) stores a colorimetry code in E3E6[4:0] (BT.2020 YCbCr =

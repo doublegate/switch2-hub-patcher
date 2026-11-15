@@ -40,7 +40,7 @@ SYNTHETIC_VL103 = (
     'f4068d18380030034a0f84702011468a6abb4aa53da97e9289796c0bd09241f2',
     '1e7ae24aa2ce36d25bb243851ec9721da769514bcac175974eba5ea976860278',
 )
-SYNTHETIC_RTD2142_SDR_FIX = '960e277c5aa2f4d1a951405c1297330b1f09d4e6cc49df81eaf75542ca12a792'
+SYNTHETIC_RTD2142_SDR_FIX = 'c19e5a524d0d576fa1a427fd06ba49abde1d40433e9213fd7cf64b041164bbfa'
 SYNTHETIC_RTD2142 = 'fa03c9a336b3f9280154d41465402cd185ffaae2e13bb27a4c4219e7c10955f9'
 
 
@@ -116,7 +116,7 @@ class OfflineTests(unittest.TestCase):
             self.assertEqual(pipeline.identify(b''), 'VL103 patched')
         sdr_fix = pipeline.RTD2142_SDR_FIX_STEPS[-1][2]
         with mock.patch.object(pipeline, 'sha256', return_value=sdr_fix):
-            self.assertIn('not yet tested on a hub', pipeline.identify(b''))
+            self.assertIn('SDR-fix candidate v7b', pipeline.identify(b''))
         for digest, _ in pipeline.RTD2142_SDR_FIX_SUPERSEDED:
             with mock.patch.object(pipeline, 'sha256', return_value=digest):
                 self.assertIn('superseded', pipeline.identify(b''))
@@ -300,8 +300,8 @@ class AssemblerTests(unittest.TestCase):
 
     def test_synthetic_rtd2142_sdr_fix(self):
         image, manifest = synthetic.run_rtd2142_sdr_fix(synthetic.rtd2142_sdr_fix_image())
-        self.assertEqual(manifest['banks_changed'], [2, 5])
-        self.assertEqual(manifest['changed_byte_count'], 100)  # 4 hooks + overlays + 6 bytes
+        self.assertEqual(manifest['banks_changed'], [2, 4, 5])
+        self.assertEqual(manifest['changed_byte_count'], 168)  # 6 hooks + overlays + 6 bytes
         self.assertEqual(
             [(b['bank'], b['address'], b['old'], b['new']) for b in manifest['byte_patches']],
             [
@@ -320,6 +320,8 @@ class AssemblerTests(unittest.TestCase):
                 (5, 'dead'): '02fd9b',
                 (2, 'e952'): '02ff00',
                 (2, 'f31f'): '02ff20',
+                (4, '5098'): '02ff00',
+                (4, '4dc5'): '02ff2d',
             },
         )
         if pipeline.overlay_digests() == pipeline.OVERLAY_DIGESTS_SDCC_4_6_0:
@@ -331,18 +333,31 @@ class AssemblerTests(unittest.TestCase):
         field8 = bytes(memory[(5, a)] for a in range(0xFD9B, 0xFDAF))
         # rx2_field8: MISC1 bit 6 clear -> A = 0; else A = E3E6 & 1F; both to the stock DF00
         self.assertEqual(field8.hex(), '90b403e030e60990e3e6e0541f02df00e402df00')
-        bank2 = bytes(memory[(2, a)] for a in range(0xFF00, 0xFF0F))
+        bank2 = bytes(memory[(2, a)] for a in range(0xFF00, 0xFF11))
         # MISC1 bit 6 set -> stock; E3E6[4:0] == 0 -> stock (DPTR = B403 again);
         # else E3E6 &= E0, C = 0, ret. Stock continues at C479.
         self.assertEqual(bank5.hex(), '90b403e020e61190e3e6e0541f6006e054e0f0c32290b40302c479')
-        # 5B06 &= FC, inc dptr, 5B07 &= 0F, ljmp E959
-        self.assertEqual(bank2.hex(), '905b06e054fcf0a3e0540ff002e959')
+        # 5B06 &= FC, inc dptr, 5B07 = (5B07 & 0F) | 40 (GCP CD 4 = 24 bpp), ljmp E959
+        self.assertEqual(bank2.hex(), '905b06e054fcf0a3e0540f4440f002e959')
         guard = bytes(memory[(2, a)] for a in range(0xFF20, 0xFF35))
         # hdmi_drm_enable_guard: EOTF (DD9F & 7) == 0 -> 5B6B bit 5 off, else on
         self.assertEqual(guard.hex(), '90dd9fe05407905b6b6005e04420f022e054dff022')
         self.assertEqual(symbols['rx2_fmt_'], (5, 0xFD80))
         self.assertEqual(symbols['rx2_fiel'], (5, 0xFD9B))
         self.assertEqual(symbols['hdmi_dee'], (2, 0xFF00))
+        reauth = bytes(memory[(4, a)] for a in range(0xFF00, 0xFF3C))
+        # hdcp_reauth_tick: E9F0 bit 7 set -> (bit 6 set -> E9F0 = 80) and the stock poll;
+        # else ++ticks, at 10: E9F0 = C0, D943 = (D943 & F0) | 11 (state 1), R7 = 0, back to
+        # 509B; otherwise lcall EBEC, back to 509B.
+        # hdcp_auth_start: E9F0 bit 6 set -> unchanged (ours, or a retry of ours), else 0;
+        # lcall F3E0, back to 4DC8.
+        self.assertEqual(
+            reauth.hex(),
+            '90e9f0e030e70830e61d5480f0801804f0540fb40a1174c0f090d943e054f04411f07f00'
+            '02509b12ebec02509b90e9f0e020e602e4f012f3e0024dc8',
+        )
+        self.assertEqual(symbols['hdcp_rea'], (4, 0xFF00))
+        self.assertEqual(symbols['hdcp_aut'], (4, 0xFF2D))
 
     def test_sdr_fix_rejects_bad_guards(self):
         good = synthetic.rtd2142_sdr_fix_image()
@@ -351,6 +366,8 @@ class AssemblerTests(unittest.TestCase):
             (2 * 0x10000 + 0xFF10, 0x00, 'region 2:ff00 not erased'),
             (2 * 0x10000 + 0xE279, 0x00, 'byte patch mismatch at 2:e279'),
             (2 * 0x10000 + 0xFF30, 0x00, 'region 2:ff20 not erased'),
+            (4 * 0x10000 + 0x5098, 0x02, 'hook mismatch at 4:5098'),
+            (4 * 0x10000 + 0xFF3F, 0x00, 'region 4:ff00 not erased'),
         ):
             image = bytearray(good)
             image[at] = value

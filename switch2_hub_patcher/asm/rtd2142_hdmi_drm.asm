@@ -1,4 +1,4 @@
-; RTD2142 bank 2, HDMI TX HDR (DRM, type 87h) packet. CANDIDATE (SDR-fix v5), not yet tested.
+; RTD2142 bank 2, HDMI TX HDR (DRM, type 87h) packet. CANDIDATE (SDR-fix v5+), tested on one hub.
 ;
 ; Stock behaviour: hdmi_drm_update (F2E6) keeps the HDR packet enabled (5B6B bit 5,
 ; pr_spkt3_en) whenever the DP source sends HDR metadata, whatever its EOTF. In SDR, macOS
