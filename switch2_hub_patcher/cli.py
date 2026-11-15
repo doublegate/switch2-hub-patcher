@@ -14,6 +14,8 @@ from pathlib import Path
 from . import __version__, dpaux, fwupd, rtd2142_map, rtdisp, status
 from .pipeline import (
     OVERLAY_DIGESTS_SDCC_4_6_0,
+    RTD2142_SDR_FIX_BT2020_LABEL,
+    RTD2142_SDR_FIX_BT2020_STEPS,
     RTD2142_SDR_FIX_LABEL,
     RTD2142_SDR_FIX_STEPS,
     RTD2142_SDR_FIX_SUPERSEDED,
@@ -298,6 +300,7 @@ def cmd_rtd_flash(args):
         RTD2142_STOCK: 'RTD2142 stock',
         RTD2142_STEPS[-1][2]: 'RTD2142 patched',
         RTD2142_SDR_FIX_STEPS[-1][2]: RTD2142_SDR_FIX_LABEL,
+        RTD2142_SDR_FIX_BT2020_STEPS[-1][2]: RTD2142_SDR_FIX_BT2020_LABEL,
         **dict(RTD2142_SDR_FIX_SUPERSEDED),
     }
     if platform.system() == 'Darwin' and args.bus is None:

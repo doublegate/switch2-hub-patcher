@@ -114,6 +114,36 @@ class Vl103FlashTests(unittest.TestCase):
         self.assertIn('target image is not a known', err)
 
 
+class RtdFlashKnownImagesTests(unittest.TestCase):
+    def test_every_buildable_candidate_is_a_known_flash_target(self):
+        with tempfile.TemporaryDirectory() as d:
+            target, base = Path(d) / 't.bin', Path(d) / 'b.bin'
+            target.write_bytes(b't')
+            base.write_bytes(b'b')
+            seen = {}
+
+            def run_isp(args, action):
+                with mock.patch.object(
+                    cli.rtdisp, 'flash', lambda isp, b, t, known, **kw: seen.update(known)
+                ):
+                    return action(None)
+
+            with (
+                mock.patch.object(cli, 'run_isp', run_isp),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                cli.main(['rtd-flash', str(target), '--base', str(base), '--allow-brick'])
+        for steps in (
+            pipeline.RTD2142_STEPS,
+            pipeline.RTD2142_SDR_FIX_STEPS,
+            pipeline.RTD2142_SDR_FIX_BT2020_STEPS,
+        ):
+            self.assertIn(steps[-1][2], seen)
+        self.assertIn(pipeline.RTD2142_STOCK, seen)
+        for digest, _ in pipeline.RTD2142_SDR_FIX_SUPERSEDED:
+            self.assertIn(digest, seen)
+
+
 class ProgressTests(unittest.TestCase):
     def run_progress(self, tty, steps, total=1000):
         ticks = iter(range(0, 10_000, 7))
